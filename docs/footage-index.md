@@ -3,7 +3,7 @@
 Status: initial implementation. No model requests, transcription or remote
 storage changes occur. This is the local foundation of the target pipeline.
 
-Import a JSON array using `edie --state STATE ingest PROJECT MANIFEST --media MEDIA`.
+Import a JSON array using `edie --state STATE ingest MANIFEST --media MEDIA`.
 Each entry requires `source_id`, `version`, `path` (relative to the authorised
 mount) and `sha256`. The broker owns authoritative IDs/versions; Edie verifies
 local hashes. A manifest is committed atomically. Reusing an ID/version with a
@@ -14,7 +14,7 @@ active revisions need it. Source versions are opaque, not lexically chronologica
 Prepare frames with:
 
 ```
-python -m edie.preprocess --state STATE --media MEDIA --project PROJECT --source-id ID --version VERSION
+python -m edie.preprocess --state STATE --media MEDIA --source-id ID --version VERSION
 ```
 
 The library permits bounded chunk duration, overlap, sampling rate, image size
@@ -24,7 +24,7 @@ retain source-relative presentation times; timestamps are measured from the firs
 decoded video frame, not wall clock or proxy frame number. Audio alignment still
 needs a shared stream-origin mapping before transcript integration.
 
-The private project cache key includes source hash and preprocessing settings/
+The private deployment cache key includes source hash and preprocessing settings/
 version. Each completed chunk stores frame paths, timestamps, sizes and hashes.
 Interrupted work leaves completed chunks reusable; missing/corrupt cached images
 cause that chunk to rebuild. Unique attempt directories preserve previous files.

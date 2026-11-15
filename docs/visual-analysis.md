@@ -11,7 +11,7 @@ footage to the VLM. Keep originals untouched for final rendering. Transcription
 is a separate audio pipeline; combine its timestamped output with visual
 observations downstream. Run preprocessing locally on broker-authorised copies.
 Only explicitly permitted endpoints may receive media, including derived frames
-and proxies. Small derivatives remain private project material.
+and proxies. Small derivatives remain private deployment material.
 
 Compressed file size alone is not an inference budget: frame count, resolution
 and the model's visual-token accounting determine the input workload. Cap these
@@ -62,7 +62,7 @@ Edie holds no remote-storage credentials.
 
 Cache by source content hash, source interval, preprocessing settings/version,
 model identity, prompt version and any context that affects the result. Scope
-caches to the private project by default. Preserve stable broker IDs across
+caches to the private deployment by default. Preserve stable broker IDs across
 renames; changed content invalidates affected analysis. Record completed chunks
 atomically, retain attempt/usage records, and resume only missing or invalidated
 work. A partial index must expose its coverage and failures.

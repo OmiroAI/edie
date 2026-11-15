@@ -17,8 +17,7 @@ class RenderWorkerTest(unittest.TestCase):
             clip = media / 'fixture.mp4'
             subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '2', '-c:v', 'libx264', '-c:a', 'aac', str(clip)], check=True)
             store = Store(Path(root) / 'state')
-            project = store.project('Fixture')
-            job = store.job(project, dict(goal='test', audience='test', format='16:9', duration=1, language='en'))
+            job = store.job(dict(goal='test', audience='test', format='16:9', duration=1, language='en'))
             revision = store.revision(job, [{'path': clip.name, 'sha256': digest(clip), 'in': 0.25, 'out': 1.25}])
             tasks = Tasks(store.db)
             task = tasks.submit(job, 'one', {'action': 'render', 'revision': revision})

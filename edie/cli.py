@@ -9,10 +9,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--state', default='state')
     commands = parser.add_subparsers(dest='command', required=True)
-    create = commands.add_parser('project')
-    create.add_argument('name')
     job = commands.add_parser('job')
-    job.add_argument('project')
     job.add_argument('brief', type=json.loads)
     revision = commands.add_parser('revision')
     revision.add_argument('job')
@@ -21,19 +18,16 @@ def main():
     preview.add_argument('revision')
     preview.add_argument('--media', required=True)
     ingest = commands.add_parser('ingest')
-    ingest.add_argument('project')
     ingest.add_argument('manifest')
     ingest.add_argument('--media', required=True)
     args = parser.parse_args()
     store = Store(args.state)
-    if args.command == 'project':
-        print(store.project(args.name))
-    elif args.command == 'job':
-        print(store.job(args.project, args.brief))
+    if args.command == 'job':
+        print(store.job(args.brief))
     elif args.command == 'revision':
         print(store.revision(args.job, args.clips))
     elif args.command == 'ingest':
         entries = json.loads(Path(args.manifest).read_text())
-        print(json.dumps(Catalogue(store).ingest(args.project, entries, args.media)))
+        print(json.dumps(Catalogue(store).ingest(entries, args.media)))
     else:
         print(render(store, args.revision, args.media))

@@ -15,6 +15,9 @@ class Store:
         self.db = sqlite3.connect(self.root / 'edie.sqlite')
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, kind TEXT, body TEXT)')
+        if self.db.execute("SELECT 1 FROM records WHERE kind='project' LIMIT 1").fetchone():
+            self.db.close()
+            raise ValueError('Legacy multi-project state: preserve it and select a fresh deployment state directory; automatic context merging is disabled')
 
     def put(self, kind, body):
         identifier = uuid.uuid4().hex
@@ -28,13 +31,7 @@ class Store:
             raise ValueError('Record not found')
         return json.loads(row[0])
 
-    def project(self, name):
-        if not isinstance(name, str) or not name.strip() or len(name) > 200:
-            raise ValueError('Project name required; maximum 200 characters')
-        return self.put('project', {'name': name})
-
-    def job(self, project, brief):
-        self.get(project, 'project')
+    def job(self, brief):
         required = {'goal', 'audience', 'format', 'duration', 'language'}
         if not isinstance(brief, dict) or not required <= brief.keys():
             raise ValueError('Brief requires goal, audience, format, duration and language')
@@ -42,7 +39,7 @@ class Store:
             raise ValueError('Brief fields must be nonempty text')
         if isinstance(brief['duration'], bool) or not isinstance(brief['duration'], (int, float)) or not math.isfinite(brief['duration']) or brief['duration'] <= 0:
             raise ValueError('Duration must be positive seconds')
-        return self.put('job', {'project': project, 'brief': brief})
+        return self.put('job', {'brief': brief})
 
     def revision(self, job, clips):
         self.get(job, 'job')

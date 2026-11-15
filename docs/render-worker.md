@@ -3,7 +3,7 @@
 Status: development implementation; not production-ready.
 
 The management API and render workers share a private SQLite database in WAL
-mode. Records hold projects, jobs, immutable revisions, feedback and approvals.
+mode. Records hold jobs, immutable revisions, feedback and approvals.
 The task table holds idempotency keys, inputs, leases, state and output metadata.
 An external broker supplies read-only local footage; no storage credentials enter
 Edie. Model orchestration and the footage index are future components.
@@ -37,7 +37,7 @@ recovery currently rerenders rather than adopting it. No automatic cleanup.
 
 ## Limits
 
-One operator bearer token grants access to all local projects. There is no
+One operator bearer token grants access to all jobs in this deployment. There is no
 multi-tenant access control. API validation and renderer support remain limited.
 Rendering currently requires audio and produces 720p/30fps previews. Concurrent
 requests for the same revision may render separate attempts; artifacts are safe

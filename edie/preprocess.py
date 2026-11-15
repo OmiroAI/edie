@@ -13,7 +13,7 @@ from .index import Catalogue
 VERSION = 1
 
 
-def prepare(store, project, source_id, version, media_root, chunk_seconds=30, overlap=2, fps=1, long_edge=640, max_frames=64):
+def prepare(store, source_id, version, media_root, chunk_seconds=30, overlap=2, fps=1, long_edge=640, max_frames=64):
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (chunk_seconds, overlap, fps)):
         raise ValueError('Finite sampling settings required')
     if not (1 <= chunk_seconds <= 60 and 0 <= overlap < chunk_seconds and 0 < fps <= 8):
@@ -22,7 +22,7 @@ def prepare(store, project, source_id, version, media_root, chunk_seconds=30, ov
         raise ValueError('Invalid image/frame bound')
     if math.ceil(chunk_seconds * fps) > max_frames:
         raise ValueError('Chunk exceeds frame budget')
-    entry = Catalogue(store).get(project, source_id, version)
+    entry = Catalogue(store).get(source_id, version)
     local = source(media_root, entry['path'])
     if digest(local) != entry['sha256']:
         raise ValueError('Source changed')
@@ -35,7 +35,7 @@ def prepare(store, project, source_id, version, media_root, chunk_seconds=30, ov
         raise ValueError('Unsupported duration')
     settings = dict(version=VERSION, chunk_seconds=chunk_seconds, overlap=overlap, fps=fps, long_edge=long_edge, max_frames=max_frames)
     key = hashlib.sha256(json.dumps({'hash': entry['sha256'], 'settings': settings}, sort_keys=True).encode()).hexdigest()
-    root = store.root / 'analysis' / project / key
+    root = store.root / 'analysis' / key
     root.mkdir(parents=True, exist_ok=True)
     chunks = []
     start = 0.0
@@ -71,20 +71,19 @@ def prepare(store, project, source_id, version, media_root, chunk_seconds=30, ov
         if end == duration:
             break
         start += chunk_seconds - overlap
-    return {'project': project, 'source_id': source_id, 'source_version': version, 'source_sha256': entry['sha256'], 'cache_root': str(root.relative_to(store.root)), 'timestamp_basis': 'seconds from first decoded video presentation timestamp', 'settings': settings, 'chunks': chunks}
+    return {'source_id': source_id, 'source_version': version, 'source_sha256': entry['sha256'], 'cache_root': str(root.relative_to(store.root)), 'timestamp_basis': 'seconds from first decoded video presentation timestamp', 'settings': settings, 'chunks': chunks}
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--state', required=True)
     parser.add_argument('--media', required=True)
-    parser.add_argument('--project', required=True)
     parser.add_argument('--source-id', required=True)
     parser.add_argument('--version', required=True)
     args = parser.parse_args()
     store = Store(args.state)
     try:
-        print(json.dumps(prepare(store, args.project, args.source_id, args.version, args.media)))
+        print(json.dumps(prepare(store, args.source_id, args.version, args.media)))
     finally:
         store.db.close()
 

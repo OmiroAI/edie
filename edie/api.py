@@ -51,7 +51,7 @@ def handler(root, token):
                         return
                     if len(path) == 2 and path[0] == 'tasks':
                         return self.respond(200, tasks.get(path[1]))
-                    kinds = {'projects': 'project', 'jobs': 'job', 'revisions': 'revision'}
+                    kinds = {'jobs': 'job', 'revisions': 'revision'}
                     if len(path) == 2 and path[0] in kinds:
                         return self.respond(200, store.get(path[1], kinds[path[0]]))
                     if len(path) == 1 and path[0] in kinds:
@@ -64,10 +64,10 @@ def handler(root, token):
                     body = json.loads(self.rfile.read(length), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite number')))
                     if not isinstance(body, dict):
                         raise ValueError('Object body required')
-                    if path == ['projects']:
-                        identifier = store.project(body['name'])
-                    elif path == ['jobs']:
-                        identifier = store.job(body['project'], body['brief'])
+                    if path == ['jobs']:
+                        if 'project' in body:
+                            raise ValueError('Projects are not supported')
+                        identifier = store.job(body['brief'])
                     elif path == ['revisions']:
                         identifier = store.revision(body['job'], body['clips'])
                     elif path == ['feedback']:

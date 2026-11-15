@@ -1,14 +1,15 @@
 # Working on Edie
 
 Edie is a generic, self-hostable video-editor assistant built on Codex. Build a
-new application; supplied skills and other projects are references, not code to
-port wholesale. Read README.md and relevant docs before making changes.
+new application. One deployment owns one editorial context, with no project
+entity. Supplied skills and other applications are references, not code to port
+wholesale. Read README.md and relevant docs before making changes.
 
 - Document system architecture, API contracts, data models, processing pipelines
   and significant design decisions in `docs/`. Update those documents alongside
   implementation changes, link them from README.md, and distinguish proposed,
   implemented and verified behaviour. Include recovery and validation where relevant.
-- Keep reusable code generic. Footage, project prompts, branding, learned context,
+- Keep reusable code generic. Footage, deployment prompts, branding, learned context,
   source manifests and deployment-specific configuration stay private and outside
   this public repository. Never commit secrets, private fleet records or raw logs.
   Supply secrets at runtime through private, ignored `.env` files; keep them out
@@ -25,8 +26,8 @@ port wholesale. Read README.md and relevant docs before making changes.
 - Preserve source references, original transcripts and human edits. Bind feedback
   and approvals to the correct job/revision. Approve the main edit before creating
   derivatives; use an accepted returned master rather than an obsolete rough cut.
-  Learn only from accepted feedback into visible, reversible project-local context.
+  Learn only from accepted feedback into visible, reversible deployment-local context.
 - Preserve existing edits and runtime data. Work on feature branches and run
-  checks appropriate to the change. Do not claim completion from mocks or a
-  dashboard: acceptance requires real authorised footage, actual finishing-app
+  checks appropriate to the change. Use mocks for control/failure cases and
+  synthetic media for deterministic checks; product acceptance requires real authorised footage, actual finishing-app
   handoff, export validation and demonstrated recovery.

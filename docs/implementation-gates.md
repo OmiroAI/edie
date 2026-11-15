@@ -1,6 +1,9 @@
-# Implementation and acceptance gates
+# Implementation roadmap and validation
 
-The initial core is not ready for production. Completion requires real authorised
+This developer roadmap separates implemented utilities from the remaining agent
+capabilities and defines what evidence each delivery needs. It is not an extra
+operator approval workflow. Mocks and synthetic media are useful automated tests;
+real footage validates editorial behaviour. The initial core is not ready for production. Completion requires real authorised
 footage, actual finishing-application round trips and interruption recovery.
 Unit tests and synthetic clips cannot satisfy those gates.
 
@@ -24,7 +27,7 @@ Still to implement:
   frame-level recovery checkpoints. A render worker now handles leases, running
   pause/cancel requests, explicit recovery and artifact publication.
 - Main approval before derivatives, final approval, delivery packages, covers,
-  posting materials and reversible project-local accepted-feedback learning.
+  posting materials and reversible deployment-local accepted-feedback learning.
 - Per-video budget reservations, actual model usage/cost/retry accounting.
 - Export stream/timing/bounds validation and visual/audio defect review beyond
   the currently implemented decode and duration checks.
@@ -38,7 +41,7 @@ agent integration; messaging adapters must not bypass revision bindings.
 
 Earlier validation: record persistence across reopen,
 cross-job approval rejection, traversal and symlink escape rejection. FFmpeg remains unavailable on the host but is installed in the tested Docker
-image. Nine tests pass inside Docker, including synthetic rendering through
+image. Ten tests pass inside Docker, including synthetic rendering through
 the queue, source-change rejection, lease recovery and control acknowledgement.
 A two-second preview from authorised footage also rendered successfully in a
 network-isolated container; private evidence stays outside this repository.

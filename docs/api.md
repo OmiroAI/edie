@@ -12,10 +12,9 @@ use `Cache-Control: no-store`; request paths/bodies are not logged.
 | Method/path | Contract |
 | --- | --- |
 | GET /health | Service liveness |
-| GET /projects, /jobs, /revisions | List shared records |
-| GET /projects/ID, /jobs/ID, /revisions/ID | Read one record |
-| POST /projects | `name` |
-| POST /jobs | `project`, `brief` containing goal, audience, format, duration, language |
+| GET /jobs, /revisions | List shared records |
+| GET /jobs/ID, /revisions/ID | Read one record |
+| POST /jobs | `brief` containing goal, audience, format, duration, language |
 | POST /revisions | `job`, nonempty `clips` with local path, SHA-256, in/out seconds |
 | POST /feedback | `job`, `revision`, `text`, `timestamp` in seconds |
 | POST /approvals | `job`, `revision`; records intent, not a full release gate yet |
@@ -40,3 +39,15 @@ Clients should use the artifact route rather than treating the path as a host UR
 Run the API with `python -m edie.api` and a worker with
 `python -m edie.worker --state /private/state --media /authorised/media`.
 Add `--once` to process at most one task. Workers need no API token.
+
+## Deployment scope
+
+Each deployment owns one editorial context. There are no project routes or project
+IDs; POST /jobs accepts only a brief, without a project selector. Jobs are individual
+stories, while source metadata is reusable across jobs in this deployment.
+
+Pre-change development databases containing project records are rejected at startup
+rather than silently merging their contexts. Preserve the original state directory
+and use a fresh state directory for this development version. No automatic data
+migration or deletion occurs; a selective migration tool is still needed if those
+historical jobs must be resumed. Old media and output files remain untouched.

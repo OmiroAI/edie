@@ -9,11 +9,10 @@ class Catalogue:
     def __init__(self, store):
         self.store = store
         store.db.execute('''CREATE TABLE IF NOT EXISTS sources (
-            project TEXT, source_id TEXT, version TEXT, hash TEXT, path TEXT,
-            PRIMARY KEY(project,source_id,version))''')
+            source_id TEXT, version TEXT, hash TEXT, path TEXT,
+            PRIMARY KEY(source_id,version))''')
 
-    def ingest(self, project, entries, media_root):
-        self.store.get(project, 'project')
+    def ingest(self, entries, media_root):
         if not isinstance(entries, list) or not entries:
             raise ValueError('Nonempty source list required')
         verified = []
@@ -37,20 +36,19 @@ class Catalogue:
         with self.store.db:
             self.store.db.execute('BEGIN IMMEDIATE')
             for entry in verified:
-                key = (project, entry['source_id'], entry['version'])
-                previous = self.store.db.execute('SELECT hash FROM sources WHERE project=? AND source_id=? AND version=?', key).fetchone()
+                key = (entry['source_id'], entry['version'])
+                previous = self.store.db.execute('SELECT hash FROM sources WHERE source_id=? AND version=?', key).fetchone()
                 if previous and previous[0] != entry['sha256']:
                     raise ValueError('Source version reused with different content')
-                self.store.db.execute('INSERT INTO sources VALUES (?,?,?,?,?) ON CONFLICT(project,source_id,version) DO UPDATE SET path=excluded.path', (*key, entry['sha256'], entry['path']))
-        return self.list(project)
+                self.store.db.execute('INSERT INTO sources VALUES (?,?,?,?) ON CONFLICT(source_id,version) DO UPDATE SET path=excluded.path', (*key, entry['sha256'], entry['path']))
+        return self.list()
 
-    def list(self, project):
-        self.store.get(project, 'project')
-        rows = self.store.db.execute('SELECT source_id,version,hash,path FROM sources WHERE project=? ORDER BY source_id,version', (project,)).fetchall()
+    def list(self):
+        rows = self.store.db.execute('SELECT source_id,version,hash,path FROM sources ORDER BY source_id,version').fetchall()
         return [dict(zip(('source_id', 'version', 'sha256', 'path'), row)) for row in rows]
 
-    def get(self, project, source_id, version):
-        for entry in self.list(project):
+    def get(self, source_id, version):
+        for entry in self.list():
             if entry['source_id'] == source_id and entry['version'] == version:
                 return entry
         raise ValueError('Unknown source version')

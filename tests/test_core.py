@@ -8,9 +8,8 @@ class RecordsTest(unittest.TestCase):
     def test_revision_binding_and_restart(self):
         with tempfile.TemporaryDirectory() as root:
             store = Store(root)
-            project = store.project('Example')
             brief = dict(goal='story', audience='public', format='16:9', duration=5, language='en')
-            first, second = store.job(project, brief), store.job(project, brief)
+            first, second = store.job(brief), store.job(brief)
             revision = store.revision(first, [dict(path='a.mp4', sha256='a'*64, **{'in': 0, 'out': 1})])
             with self.assertRaises(ValueError):
                 store.approve(second, revision)
@@ -28,3 +27,14 @@ class RecordsTest(unittest.TestCase):
             for path in ['../private', 'link', str(private)]:
                 with self.assertRaises(ValueError):
                     source(media, path)
+
+    def test_legacy_state_is_preserved_not_merged(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as root:
+            store = Store(root)
+            identifier = store.put('project', {'name': 'Legacy'})
+            store.db.close()
+            with self.assertRaisesRegex(ValueError, 'Legacy multi-project'):
+                Store(root)
+            with sqlite3.connect(Path(root)/'edie.sqlite') as db:
+                self.assertEqual(db.execute('SELECT id FROM records WHERE kind=?', ('project',)).fetchone()[0], identifier)

@@ -13,7 +13,7 @@ state, context, capability routing, sandbox boundaries, validation and approval
 gates. The language model proposes editorial work; the coordinator determines
 whether that work is permitted and commits validated results.
 
-Reusable application code is public. Project prompts, assets, footage, examples,
+Reusable application code is public. Deployment prompts, assets, footage, examples,
 feedback, context and outputs remain private. An external broker owns remote
 storage credentials and the mapping to originals. Edie receives authorised local
 copies and returns artifacts and change proposals. It never applies remote file
@@ -27,7 +27,7 @@ flowchart TD
     Agent[External agent or messaging adapter] --> API
     API --> Coordinator[Durable workflow coordinator]
     Coordinator --> State[(Private records and artifact store)]
-    Coordinator --> Context[Project context assembler]
+    Coordinator --> Context[Deployment context assembler]
     Context --> Codex[Codex task runner in job sandbox]
     Codex --> Tools[Scoped editorial and media tools]
     Tools --> Router[Capability router and usage reservations]
@@ -63,7 +63,7 @@ result-commit boundary first.
 
 | Record | Responsibility |
 | --- | --- |
-| Project | Private editorial context, prompts, brand/style assets, allowed capabilities and context versions |
+| Deployment context | One private editorial identity: prompts, brand/style assets, allowed capabilities and context versions; configured by the operator, not a project entity |
 | Collection | Reusable footage set; can support multiple jobs without repeating analysis |
 | Source version | Stable broker ID, immutable version/hash, local mapping and media metadata |
 | Analysis chunk | Source interval, sampling/evidence, transcript or observations, model/settings version and coverage |
@@ -87,7 +87,7 @@ to another revision after cuts.
 ## Editorial workflow and gates
 
 1. **Define output.** Collect missing brief fields and supplied script. Select
-   project context and authorised collection. A partial brief may remain a draft;
+   deployment context and authorised collection. A partial brief may remain a draft;
    do not invent the audience, purpose or promised facts to advance it.
 2. **Index footage.** Validate broker manifests, hash local copies, reuse valid
    analysis, transcribe audio separately and analyse sampled visuals. Record
@@ -110,7 +110,7 @@ to another revision after cuts.
    not automatically approve every derivative or publishing action.
 7. **Validate and finalise.** Validate each export and package, resolve failures,
    obtain final approval for the exact deliverables and return them to the broker.
-   Only then propose project-local learning from accepted feedback.
+   Only then propose deployment-local learning from accepted feedback.
 
 A job has a workflow stage and a separate execution status: waiting for input,
 queued, running, paused, interrupted, failed, awaiting review or finalised. Task
@@ -119,36 +119,18 @@ input invalidate downstream approvals, while preserving their historical records
 
 ## Codex harness and reasoning loop
 
-The coordinator schedules bounded typed tasks, such as `propose_script`,
-`revise_timeline`, `review_export` or `propose_context_change`. It creates an
-immutable task envelope containing project/job IDs, exact input versions, the
-objective, output schema, permitted tools, route policy, resource limits and
-required approval scopes. No secrets are embedded in prompts.
+Edie is a goal-driven agent. Codex chooses the next editorial action from the
+current evidence, uses tools, evaluates observations and revises its plan until
+it reaches a human gate, completion or a concrete blocker. The coordinator
+persists decisions and enforces boundaries; the render queue is a tool subsystem.
+The [agentic-loop contract](agent-loop.md) defines decision outputs, observations,
+replanning, stop conditions, steering and restart behaviour. It is target design;
+the current code does not yet implement that agent loop.
 
-The context assembler provides the project context version, brief, relevant
-source-linked evidence, current script/timeline, accepted human changes and
-unresolved feedback. Retrieve bounded evidence instead of stuffing every video
-or transcript into every prompt. Other projects' private context is never used.
-Footage text, filenames, transcripts and retrieved documents are untrusted data,
-not authority to change tools, routes, budget or approval policy.
-
-The Codex runner may inspect media, invoke approved tools and use full shell access
-inside its disposable sandbox. Output files and structured decisions are proposals.
-A deterministic validator checks schemas, source bounds, required assets, budget,
-revision ancestry and approval prerequisites. Only the coordinator can atomically
-commit them. Model-generated shell success is not a valid approval signal.
-
-Each loop is: snapshot inputs → reserve resources → run bounded task → validate
-staged output → commit or return actionable errors. Retry only within configured
-limits; persist failed-attempt usage. Missing assets, uncertain evidence or exhausted
-budget yields a visible blocked task or human question, not fabricated completion.
-
-Provider conversation/session IDs may help resume reasoning, but durable Edie
-records are authoritative. Recovery must work from the committed task envelope
-and checkpoints without relying on an undocumented model conversation. Exact Codex
-adapter invocation and structured-event handling require implementation and a
-compatibility test against the installed runtime; this design does not assume a
-particular SDK or subscription-authentication mechanism.
+One deployment owns one private context. There is no project entity or creation
+endpoint. Jobs represent individual stories; reusable collections may support
+several jobs. Deployment context is versioned and pinned per run. Codex workers
+receive bounded evidence and task-local files, never whole-state write access.
 
 ## Model routing, credentials and spending
 
@@ -195,11 +177,11 @@ and describe it as the accepted edit.
 
 After final approval, derive candidate preference changes only from feedback that
 was accepted for that output. Keep the evidence references and a readable context
-diff. Activation produces a new project context version; operators can correct or
+diff. Activation produces a new deployment context version; operators can correct or
 revert it. Jobs already in progress keep their selected context version unless an
 explicit refresh creates a new revision. Rejected drafts and inferred preferences
 are not silently learned. This updates context, not model weights, and does not
-share lessons between projects.
+share lessons between deployments.
 
 ## API, dashboard and integrations
 
@@ -218,6 +200,10 @@ operations. Use idempotency keys and expected-revision preconditions for mutatio
 return explicit state conflicts rather than overwriting newer human edits.
 
 ## Execution, recovery and deployment
+
+The [storage policy](storage.md) defines proposed disk reservations, retention,
+cleanup and context-window budgeting. These controls are not implemented yet.
+
 
 Docker separates API/coordinator, deterministic media workers and isolated Codex
 workers. Persist private metadata and artifacts across restarts; mount authorised
@@ -242,7 +228,7 @@ claiming upgrade readiness; these lifecycle guarantees are not implemented yet.
 
 | Area | Current state |
 | --- | --- |
-| Records/API | Basic projects, jobs, revisions, feedback and approval intent; single operator token |
+| Records/API | Basic jobs, revisions, feedback and approval intent; single operator token |
 | Execution | Render queue, idempotency, leases, running pause/cancel, explicit recovery, artifact retrieval |
 | Rendering | Hash-checked clips, 720p/30fps reference preview, audio required, duration/decode checks |
 | Broker/index | Initial source catalogue and bounded frame preprocessing tested; no broker API or model analysis |
@@ -260,3 +246,23 @@ verify no duplicate charges/work publication or loss of accepted human changes.
 The [implementation gates](implementation-gates.md) track remaining work. Operator
 choices still include finishing application/version, subtitle languages, style
 baseline and permitted cloud payloads; keep their actual values private.
+
+## Next design contracts
+
+Before expanding the agent implementation, specify:
+
+1. A canonical editing representation: clip/layer/audio/subtitle timing, effects,
+   source references, and supported FCP7 XML round-trip behaviour.
+2. Human authority: feedback-to-instruction rules, approval invalidation, conflict
+   resolution and accepted human-return precedence.
+3. Executable tool schemas and evaluation criteria: evidence requirements,
+   tool outcomes, editorial improvement measures and bounded retry decisions.
+4. Model adapters: actual Codex invocation/event protocol, vision/transcription
+   capability tests, credential renewal, enforced egress and usage accounting.
+
+Implement the first complete agent path before widening the feature surface:
+inspect authorised footage → propose grounded script → human approval → render
+→ inspect output → revise → request review. Validate controlled failures with
+mocks and editorial quality with real footage. Storage management and production
+hardening follow the same documented boundaries; neither is supplied merely by
+a working render queue.
