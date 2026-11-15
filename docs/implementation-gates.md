@@ -10,8 +10,9 @@ Still to implement:
   isolated subscription renewal, structured outputs and no management secrets.
 - Separate visual and Whisper-compatible transcription adapters; verified
   deployment endpoints, explicit payload permissions and no paid fallback.
-- Broker manifests with stable source IDs, source versions and incremental
-  reusable metadata; scoped organisation proposals and collision validation.
+- Broker API integration, model-generated reusable metadata, organisation
+  proposals and collision validation. A local manifest importer now verifies
+  stable source IDs/versions/hashes and supports rename-safe frame caching.
 - Source-linked story scripts, missing-footage reporting and script approval.
 - Layered rendering, graphics, transitions, grammar-preserving timed subtitles,
   uncertain terminology, transcript preservation and subtitle languages.
@@ -37,9 +38,10 @@ agent integration; messaging adapters must not bypass revision bindings.
 
 Earlier validation: record persistence across reopen,
 cross-job approval rejection, traversal and symlink escape rejection. FFmpeg remains unavailable on the host but is installed in the tested Docker
-image. Seven tests pass inside Docker, including synthetic rendering through
+image. Nine tests pass inside Docker, including synthetic rendering through
 the queue, source-change rejection, lease recovery and control acknowledgement.
 A two-second preview from authorised footage also rendered successfully in a
 network-isolated container; private evidence stays outside this repository.
 This is a technical render check, not an accepted story or complete workflow.
-No inference endpoint has been probed or used.
+Local frame preprocessing also extracted six frames from an authorised clip and
+reused the cache on a second pass. No inference endpoint has been probed or used.

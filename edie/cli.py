@@ -1,6 +1,8 @@
 import argparse
 import json
 from .core import Store, render
+from .index import Catalogue
+from pathlib import Path
 
 
 def main():
@@ -18,6 +20,10 @@ def main():
     preview = commands.add_parser('render')
     preview.add_argument('revision')
     preview.add_argument('--media', required=True)
+    ingest = commands.add_parser('ingest')
+    ingest.add_argument('project')
+    ingest.add_argument('manifest')
+    ingest.add_argument('--media', required=True)
     args = parser.parse_args()
     store = Store(args.state)
     if args.command == 'project':
@@ -26,5 +32,8 @@ def main():
         print(store.job(args.project, args.brief))
     elif args.command == 'revision':
         print(store.revision(args.job, args.clips))
+    elif args.command == 'ingest':
+        entries = json.loads(Path(args.manifest).read_text())
+        print(json.dumps(Catalogue(store).ingest(args.project, entries, args.media)))
     else:
         print(render(store, args.revision, args.media))

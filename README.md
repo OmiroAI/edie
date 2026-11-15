@@ -51,6 +51,7 @@ checking out reviewed source and rebuilding. Do not delete source copies while
 jobs are unfinished. API and worker services are available in Compose; no production deployment has been performed.
 
 See [system design](docs/system.md), [API contract](docs/api.md),
+[footage catalogue and preprocessing](docs/footage-index.md),
 [implementation gates](docs/implementation-gates.md), the proposed
 [visual analysis and review pipeline](docs/visual-analysis.md), and
 [contributor instructions](AGENTS.md).

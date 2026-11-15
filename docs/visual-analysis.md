@@ -1,7 +1,7 @@
 # Visual analysis and review pipeline
 
-Status: agreed design; not yet implemented or benchmarked. The existing renderer
-does not perform visual indexing or VLM review. Model input compatibility must
+Status: target design; a first [local frame extractor](footage-index.md) is
+implemented, but adaptive analysis and VLM review are not. Defaults are unbenchmarked. Model input compatibility must
 be verified against the configured endpoint before enabling this pipeline.
 
 ## Purpose and boundaries
