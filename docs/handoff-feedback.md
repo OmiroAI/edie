@@ -19,10 +19,9 @@ The [Apple legacy XML reference](https://developer.apple.com/library/archive/doc
 provides the interchange vocabulary. Neither document proves our output works in
 the chosen finishing-app version: import, modify and return a real package there.
 
-The interchange package is an output contract, not the entire internal editing
-model. Internal revisions still need exact timebase/source ranges, layers/audio,
-subtitle provenance and unsupported-feature records. Define that canonical model
-before implementing the exporter; it must preserve precision across cuts/round trips.
+The interchange package is an output contract. [OpenTimelineIO is the chosen
+internal timeline representation](timeline.md), with separate subtitle/provenance
+records. Its integration and the exporter remain to be implemented and tested.
 
 ## Shared-directory ownership
 

@@ -51,7 +51,7 @@ jobs are unfinished. API and worker services are available in Compose; no produc
 One deployment owns one private editorial context; video jobs are its stories.
 There is no project-creation step.
 
-See [strategy and evaluation](docs/strategy-evaluation.md),
+See [OTIO timeline design](docs/timeline.md), [strategy and evaluation](docs/strategy-evaluation.md),
 [handoff and feedback](docs/handoff-feedback.md), [agentic loop](docs/agent-loop.md), [storage policy](docs/storage.md), [model access](docs/model-access.md),
 [system design](docs/system.md), [API contract](docs/api.md),
 [footage catalogue and preprocessing](docs/footage-index.md),

@@ -9,6 +9,9 @@ Unit tests and synthetic clips cannot satisfy those gates.
 
 Still to implement:
 
+- Selected OTIO timeline model, validated editing operations and render-plan
+  compilation; preserve legacy revisions when introducing the new format.
+
 - Codex execution in a separate sandbox with task-specific configurable models,
   isolated subscription renewal, structured outputs and no management secrets.
 - Separate visual and Whisper-compatible transcription adapters; verified

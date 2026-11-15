@@ -164,6 +164,10 @@ not copied into job context, Git, images, logs or artifact packages.
 
 ## Human editing and accepted sources of truth
 
+[OpenTimelineIO](timeline.md) is the selected canonical timeline representation,
+with sidecar subtitles and Edie records. The initial supported subset, render
+compilation and FCP7 adapter integration remain to be implemented.
+
 The [handoff and feedback contract](handoff-feedback.md) defines the initial
 XML/SRT/media/MP4 package and broker-mediated shared-directory workflow.
 
@@ -262,8 +266,8 @@ baseline and permitted cloud payloads; keep their actual values private.
 
 Before expanding the agent implementation, specify:
 
-1. A canonical editing representation: clip/layer/audio/subtitle timing, effects,
-   source references, and supported FCP7 XML round-trip behaviour.
+1. Implement the [selected OTIO representation](timeline.md): precise timing,
+   subtitle sidecars, render compilation and tested FCP7 XML round-trip behaviour.
 2. Human authority: feedback-to-instruction rules, approval invalidation, conflict
    resolution and accepted human-return precedence.
 3. Executable tool schemas and evaluation criteria: evidence requirements,
