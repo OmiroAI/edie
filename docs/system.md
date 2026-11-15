@@ -164,6 +164,9 @@ not copied into job context, Git, images, logs or artifact packages.
 
 ## Human editing and accepted sources of truth
 
+The [handoff and feedback contract](handoff-feedback.md) defines the initial
+XML/SRT/media/MP4 package and broker-mediated shared-directory workflow.
+
 The initial handoff contains FCP7 XML, per-language SRT, linked source media and
 required assets, plus an MP4 reference. Package a dependency manifest and explicit
 warnings for unsupported effects/styling. Validate an import/export round trip in
@@ -178,6 +181,10 @@ layers must ask for compatible assets. Never regenerate from an obsolete rough c
 and describe it as the accepted edit.
 
 ## Learning and context lifecycle
+
+A versioned social-media/editorial strategy supplies audience, story and style
+context. The [evaluation design](strategy-evaluation.md) separates technical,
+workflow and human-calibrated editorial checks from later audience outcomes.
 
 After final approval, derive candidate preference changes only from feedback that
 was accepted for that output. Keep the evidence references and a readable context

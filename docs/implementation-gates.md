@@ -47,4 +47,5 @@ A two-second preview from authorised footage also rendered successfully in a
 network-isolated container; private evidence stays outside this repository.
 This is a technical render check, not an accepted story or complete workflow.
 Local frame preprocessing also extracted six frames from an authorised clip and
-reused the cache on a second pass. No inference endpoint has been probed or used.
+reused the cache on a second pass. Subsequent model-access work verified local
+model listings/health; authenticated gateway generation remains unverified.
