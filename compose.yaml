@@ -38,6 +38,30 @@ services:
     volumes:
       - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
       - ${EDIE_STATE:?Set private state directory}:/state
+  coordinator:
+    <<: *runtime
+    profiles: [agent]
+    entrypoint: [python, -m, edie.daemon, --state, /state, --config, /config, --media, /media, --socket, /run/codex.sock, --routes, /config/routes.json]
+    network_mode: none
+    init: true
+    volumes:
+      - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
+      - ${EDIE_STATE:?Set private state directory}:/state
+      - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
+      - ${EDIE_ROUTES_FILE:-./config/routes.json}:/config/routes.json:ro
+      - ${EDIE_CODEX_SOCKET:-./config/codex.sock}:/run/codex.sock
+      - ${EDIE_MODEL_SOCKET:-./config/models.sock}:/run/models.sock
+  analysis:
+    <<: *runtime
+    profiles: [index]
+    entrypoint: [python, -m, edie.analysis, --state, /state, --media, /media, --routes, /config/routes.json, --manifest, /config/manifest.json]
+    network_mode: none
+    volumes:
+      - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
+      - ${EDIE_STATE:?Set private state directory}:/state
+      - ${EDIE_ROUTES_FILE:-./config/routes.json}:/config/routes.json:ro
+      - ${EDIE_MANIFEST_FILE:-./config/manifest.json}:/config/manifest.json:ro
+      - ${EDIE_MODEL_SOCKET:-./config/models.sock}:/run/models.sock
 networks:
   management:
     internal: true

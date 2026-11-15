@@ -1,5 +1,9 @@
 # Timeline representation: OpenTimelineIO
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Decision: use OpenTimelineIO (OTIO) as Edie's canonical editorial timeline format.
 Status: accepted design; integration is not implemented. Current revisions still
 store flat clip lists, and the renderer does not consume OTIO yet.

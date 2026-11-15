@@ -1,5 +1,9 @@
 # Strategy context and editorial evaluation
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Status: researched design, not an implemented evaluation service. Sources checked
 2026-11-15. The test scenarios and starting rubric below are Edie design proposals,
 not published benchmarks or a validated predictor of social performance.

@@ -1,5 +1,9 @@
 # Edie's agentic loop
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Status: target contract, not implemented by the current render worker. One Edie
 deployment is one agent with its own private editorial context. Video jobs are
 persistent goals; render/index tasks are tools the agent can choose to use.

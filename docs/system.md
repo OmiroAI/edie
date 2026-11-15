@@ -1,5 +1,9 @@
 # Edie: video-editor assistant harness
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Status: target architecture, with an implementation map below. This document
 specifies the whole assistant, not just the render service. Proposed components
 and contracts are not claims that they already work. The target must be accepted

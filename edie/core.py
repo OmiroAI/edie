@@ -53,6 +53,20 @@ class Store:
             raise ValueError('Job has no configured context')
         return self.context.load(reference['hash'])
 
+    def derivative(self, parent_job, brief):
+        from .workflow import Workflow, identity
+        state = Workflow(self).get(parent_job)
+        if not state['revision'] or state['approvals'].get('main') != identity(state['revision']):
+            raise ValueError('Approve the current main edit before derivatives')
+        job = self.job(brief)
+        record = self.get(job, 'job')
+        record['parent_job'] = parent_job
+        record['parent_revision'] = state['revision']
+        record['accepted_master'] = state.get('accepted_master')
+        with self.db:
+            self.db.execute('UPDATE records SET body=? WHERE id=?', (json.dumps(record), job))
+        return job
+
     def revision(self, job, clips):
         self.get(job, 'job')
         if not isinstance(clips, list) or not clips:
@@ -103,13 +117,27 @@ def probe(path):
 
 
 def render(store, revision, media_root, attempt=None):
+    from .storage import admit
     timeline = store.get(revision, 'revision')
+    admit(store.root, int(sum(c['out']-c['in'] for c in timeline['clips'])*2_000_000))
+    if 'otio' in timeline:
+        import opentimelineio as otio
+        from .timeline import compile_timeline, compile_overlays
+        canonical = otio.adapters.read_from_string(timeline['otio'], 'otio_json')
+        timeline['clips'] = compile_timeline(canonical)
+        timeline['overlays'] = compile_overlays(canonical)
     # Immutable revisions get their own output; incomplete work is never accepted.
     attempt = attempt or uuid.uuid4().hex
     if not re.fullmatch(r'[a-f0-9]{32}', attempt):
         raise ValueError('Invalid attempt')
     destination = store.root / 'outputs' / revision / attempt
     destination.mkdir(parents=True, exist_ok=False)
+    profile = store.get(timeline['job'], 'job')['brief']['format']
+    dimensions = {'16:9': (1280,720), '9:16': (720,1280), '1:1': (720,720)}
+    if profile not in dimensions:
+        raise ValueError('Unsupported output format')
+    width, height = dimensions[profile]
+    fit = f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1'
     parts = []
     for index, clip in enumerate(timeline['clips']):
         path = source(media_root, clip['path'])
@@ -118,20 +146,40 @@ def render(store, revision, media_root, attempt=None):
         metadata = probe(path)
         if clip['out'] > float(metadata['format']['duration']):
             raise ValueError('Clip exceeds source duration')
-        if not any(s['codec_type'] == 'audio' for s in metadata['streams']):
-            raise ValueError('Silent sources need an explicit audio policy; unsupported in this slice')
+        silent = not any(s['codec_type'] == 'audio' for s in metadata['streams'])
+        if silent and not clip.get('silent'):
+            raise ValueError('Silent sources need an explicit audio policy')
         part = destination / f'{index}.mp4'
-        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(clip['in']), '-i', str(path), '-t', str(clip['out']-clip['in']), '-map', '0:v:0', '-map', '0:a:0', '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1', '-r', '30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2', str(part)], check=True, capture_output=True, timeout=3600)
+        command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(clip['in']), '-i', str(path)]
+        if silent:
+            command += ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']
+        command += ['-t', str(clip['out']-clip['in']), '-map', '0:v:0', '-map', '1:a:0' if silent else '0:a:0', '-vf', fit, '-r', '30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2', str(part)]
+        subprocess.run(command, check=True, capture_output=True, timeout=3600)
         parts.append(part)
     listing = destination / 'concat.txt'
     listing.write_text(''.join(f"file '{p.name}'\n" for p in parts))
     temporary = destination / 'preview.pending.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'concat', '-safe', '1', '-i', str(listing), '-c', 'copy', '-movflags', '+faststart', str(temporary)], check=True, capture_output=True, timeout=3600)
+    for number, overlay in enumerate(timeline.get('overlays', [])):
+        path = source(media_root, overlay['path'])
+        if digest(path) != overlay['sha256']:
+            raise ValueError('B-roll source changed')
+        layered = destination / f'layer-{number}.mp4'
+        length = overlay['out'] - overlay['in']
+        filters = f"[1:v]{fit},setpts=PTS-STARTPTS+{overlay['at']}/TB[b];[0:v][b]overlay=eof_action=pass:enable='gte(t,{overlay['at']})*lt(t,{overlay['at']+length})'[v]"
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(temporary), '-ss', str(overlay['in']), '-t', str(length), '-i', str(path), '-filter_complex', filters, '-map', '[v]', '-map', '0:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy', str(layered)], check=True, capture_output=True, timeout=3600)
+        temporary = layered
     metadata = probe(temporary)
     expected = sum(c['out']-c['in'] for c in timeline['clips'])
     if abs(float(metadata['format']['duration'])-expected) > max(0.3, len(parts)*0.1):
         raise ValueError('Rendered duration mismatch')
     subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(temporary), '-f', 'null', '-'], check=True, capture_output=True, timeout=3600)
     output = destination / 'preview.mp4'
-    temporary.replace(output)
+    if timeline.get('cues'):
+        from .timeline import srt
+        subtitles = destination / 'subtitles.srt'
+        subtitles.write_text(srt(timeline['cues'], expected))
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(temporary), '-i', str(subtitles), '-map', '0:v', '-map', '0:a', '-map', '1:0', '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text', '-movflags', '+faststart', str(output)], check=True, capture_output=True, timeout=600)
+    else:
+        temporary.replace(output)
     return str(output)

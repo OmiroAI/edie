@@ -10,7 +10,7 @@ import uuid
 from .core import Store, digest, probe, source
 from .index import Catalogue
 
-VERSION = 1
+VERSION = 2
 
 
 def prepare(store, source_id, version, media_root, chunk_seconds=30, overlap=2, fps=1, long_edge=640, max_frames=64):
@@ -57,8 +57,9 @@ def prepare(store, source_id, version, media_root, chunk_seconds=30, overlap=2, 
             # Select original decoded frames rather than fps-filter duplicates.
             # Reset first presentation timestamp to zero for source-relative time.
             select = f"gte(t,{start})*lt(t,{end})*if(isnan(prev_selected_t),1,gte(t-prev_selected_t,{1/fps}))"
-            filters = f"setpts=PTS-STARTPTS,select='{select}',showinfo,scale='min({long_edge},iw)':'min({long_edge},ih)':force_original_aspect_ratio=decrease"
-            result = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-i', str(local), '-map', '0:v:0', '-an', '-vf', filters, '-fps_mode', 'vfr', '-frames:v', str(max_frames), '-q:v', '3', str(attempt/'%04d.jpg')], capture_output=True, check=True, timeout=1800)
+            origin = float(stream.get('start_time', metadata['format'].get('start_time', 0)))
+            filters = f"setpts=PTS-{origin}/TB,select='{select}',showinfo,scale='min({long_edge},iw)':'min({long_edge},ih)':force_original_aspect_ratio=decrease"
+            result = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-ss', str(start), '-t', str(end-start+0.1), '-copyts', '-i', str(local), '-map', '0:v:0', '-an', '-vf', filters, '-fps_mode', 'vfr', '-frames:v', str(max_frames), '-q:v', '3', str(attempt/'%04d.jpg')], capture_output=True, check=True, timeout=1800)
             timestamps = [float(t) for t in re.findall(r'\bn:\s*\d+\s+pts:\s*[-\d]+\s+pts_time:([-\d.e+]+)', result.stderr.decode(errors='replace'))]
             images = sorted(attempt.glob('*.jpg'))
             if not images or len(images) != len(timestamps) or any(not start <= t < end for t in timestamps):
@@ -90,3 +91,33 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def overview(store, entry, media_root, count=8, long_edge=384, start=0, end=None):
+    """Bounded coarse pass for long sources; timestamps come from decoded PTS."""
+    local=source(media_root,entry['path'])
+    if digest(local)!=entry['sha256']:raise ValueError('Source changed')
+    metadata=probe(local);stream=next(s for s in metadata['streams'] if s['codec_type']=='video')
+    duration=float(stream.get('duration',metadata['format']['duration']))
+    origin=float(stream.get('start_time',metadata['format'].get('start_time',0)))
+    end=duration if end is None else end
+    if not 0<=start<end<=duration or not 1<=count<=32:raise ValueError('Invalid overview range')
+    key=hashlib.sha256(json.dumps(dict(hash=entry['sha256'],count=count,edge=long_edge,start=start,end=end,version='overview-2'),sort_keys=True).encode()).hexdigest()
+    root=store.root/'overview'/key;root.mkdir(parents=True,exist_ok=True)
+    result=[]
+    for i in range(count):
+        second=min(end-0.01,start+i*(end-start)/count)
+        record=root/f'{i}.json'
+        if record.exists():
+            cached=json.loads(record.read_text());path=source(root,cached['path'])
+            if digest(path)!=cached['sha256']:raise ValueError('Overview cache corrupted')
+        else:
+            path=root/f'{i}.jpg'
+            command=['ffmpeg','-nostdin','-hide_banner','-loglevel','info','-y','-ss',str(max(0,second)),'-copyts','-i',str(local),'-map','0:v:0','-an','-vf',f"setpts=PTS-{origin}/TB,showinfo,scale='min({long_edge},iw)':'min({long_edge},ih)':force_original_aspect_ratio=decrease",'-frames:v','1','-q:v','3',str(path)]
+            run=subprocess.run(command,capture_output=True,check=True,timeout=180)
+            times=[float(t) for t in re.findall(r'\bn:\s*\d+\s+pts:\s*[-\d.e+]+\s+pts_time:([-\d.e+]+)',run.stderr.decode(errors='replace'))]
+            if not times or not 0<=times[0]<duration:raise ValueError('Overview timestamp unavailable')
+            cached=dict(path=path.name,source_seconds=times[0],sha256=digest(path))
+            record.write_text(json.dumps(cached))
+        result.append(dict(path=root/cached['path'],seconds=cached['source_seconds']))
+    return result

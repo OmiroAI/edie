@@ -3,6 +3,8 @@ import hmac
 import json
 import os
 import shutil
+from pathlib import Path
+from .workflow import Workflow, identity
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from .core import Store, source
 from .tasks import Tasks
@@ -27,6 +29,15 @@ def handler(root, token):
 
         def dispatch(self):
             self.connection.settimeout(10)
+            if self.command == 'GET' and self.path == '/dashboard':
+                page = Path(__file__).with_name('dashboard.html').read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                self.send_header('Content-Length', str(len(page)))
+                self.end_headers(); self.wfile.write(page); return
             if not hmac.compare_digest(self.headers.get('Authorization', '').encode(), ('Bearer '+token).encode()):
                 return self.respond(401, {'error': 'Unauthorised'})
             store = Store(root)
@@ -51,6 +62,14 @@ def handler(root, token):
                         return
                     if len(path) == 2 and path[0] == 'tasks':
                         return self.respond(200, tasks.get(path[1]))
+                    if len(path) == 3 and path[0] == 'jobs' and path[2] == 'workflow':
+                        state = Workflow(store).get(path[1])
+                        state['candidate_hashes'] = {scope: identity(state[field]) if state[field] else None for scope, field in [('script','script'),('main','revision'),('final','delivery')]}
+                        return self.respond(200, state)
+                    if len(path) == 3 and path[0] == 'jobs' and path[2] == 'events':
+                        Workflow(store)
+                        rows = store.db.execute('SELECT body FROM events WHERE job=? ORDER BY rowid', (path[1],)).fetchall()
+                        return self.respond(200, [json.loads(row[0]) for row in rows])
                     kinds = {'jobs': 'job', 'revisions': 'revision'}
                     if len(path) == 2 and path[0] in kinds:
                         return self.respond(200, store.get(path[1], kinds[path[0]]))
@@ -64,10 +83,17 @@ def handler(root, token):
                     body = json.loads(self.rfile.read(length), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite number')))
                     if not isinstance(body, dict):
                         raise ValueError('Object body required')
+                    if len(path) == 3 and path[0] == 'jobs' and path[2] == 'run':
+                        flow = Workflow(store); state = flow.start(path[1])
+                        return self.respond(202, flow.update(path[1], body['expected_state_version'], {'requested_run': True}))
+                    if len(path) == 3 and path[0] == 'jobs' and path[2] == 'events':
+                        return self.respond(201, Workflow(store).event(path[1], body['event_id'], body['expected_state_version'], body['type'], body['payload'], body['actor']))
                     if path == ['jobs']:
                         if 'project' in body:
                             raise ValueError('Projects are not supported')
                         identifier = store.job(body['brief'])
+                    elif path == ['derivatives']:
+                        identifier = store.derivative(body['parent_job'], body['brief'])
                     elif path == ['revisions']:
                         identifier = store.revision(body['job'], body['clips'])
                     elif path == ['feedback']:

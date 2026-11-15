@@ -1,5 +1,9 @@
 # Model access design
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Status: adapter design grounded in the operator's existing CLI and local inference
 setup. The runtime adapters, credential isolation and routing enforcement are not
 implemented. Deployment addresses, model aliases and private provenance belong in

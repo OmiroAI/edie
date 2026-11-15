@@ -1,5 +1,9 @@
 # Agent contracts v1 — proposed for PR approval
 
+Implementation update: [runtime workflow](runtime-workflow.md) records the current
+implemented subset, commands, validation and remaining limits. The detailed target
+contracts below extend beyond that subset.
+
 Status: design for review, not an implemented API or schema. Approval of this design
 is distinct from approval of any video. The [agent loop](agent-loop.md) explains
 behaviour; this document specifies the proposed messages and transition rules.
