@@ -134,6 +134,10 @@ receive bounded evidence and task-local files, never whole-state write access.
 
 ## Model routing, credentials and spending
 
+The [model-access contract](model-access.md) selects Codex CLI execution, local
+multimodal chat and separate Whisper-compatible transcription adapters. Actual
+addresses and model aliases are deployment-private; adapters are not implemented.
+
 Routes are configured by capability: planning, visual observation, transcription,
 editorial revision and review. Each route declares model/endpoint, supported input
 kinds, context/frame limits, credential reference, billing mode and allowed payload
