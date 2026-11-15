@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+state/
+media/
+assets/
+__pycache__/
+*.egg-info/
+.venv/
