@@ -174,7 +174,8 @@ XML/SRT/media/MP4 package and broker-mediated shared-directory workflow.
 The initial handoff contains FCP7 XML, per-language SRT, linked source media and
 required assets, plus an MP4 reference. Package a dependency manifest and explicit
 warnings for unsupported effects/styling. Validate an import/export round trip in
-the actual finishing application/version before claiming compatibility.
+the selected finishing application/version before claiming compatibility.
+Use [pluggable editor adapters](editor-adapters.md); no finishing app is fixed globally.
 
 An editable return creates a human-authored revision linked to its exported base.
 Compare timing, source references, audio and subtitles; preserve human edits and
@@ -270,8 +271,8 @@ Before expanding the agent implementation, specify:
    subtitle sidecars, render compilation and tested FCP7 XML round-trip behaviour.
 2. Human authority: feedback-to-instruction rules, approval invalidation, conflict
    resolution and accepted human-return precedence.
-3. Executable tool schemas and evaluation criteria: evidence requirements,
-   tool outcomes, editorial improvement measures and bounded retry decisions.
+3. Review and implement the [agent contracts](agent-contracts.md): decision/tool
+   schemas, checkpoints, approval transitions and bounded retry decisions.
 4. Model adapters: actual Codex invocation/event protocol, vision/transcription
    capability tests, credential renewal, enforced egress and usage accounting.
 

@@ -5,7 +5,7 @@ human-approval gates remain to be implemented and verified in the finishing app.
 
 ## Initial package
 
-Every handoff consists of Premiere-compatible Final Cut Pro 7 XML (`.xml`), one
+The first planned handoff profile consists of Premiere-compatible Final Cut Pro 7 XML (`.xml`), one
 SRT per subtitle language, linked source media and required assets, and an MP4
 reference preview. Include a manifest tying files/hashes to the job, exact revision,
 source versions and validation results. Assets must be available through the shared
@@ -22,6 +22,9 @@ the chosen finishing-app version: import, modify and return a real package there
 The interchange package is an output contract. [OpenTimelineIO is the chosen
 internal timeline representation](timeline.md), with separate subtitle/provenance
 records. Its integration and the exporter remain to be implemented and tested.
+
+The [editor-adapter design](editor-adapters.md) keeps format and finishing app
+configurable. The initial profile does not lock all future handoffs to Premiere.
 
 ## Shared-directory ownership
 

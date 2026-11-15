@@ -23,6 +23,10 @@ audience retention](https://support.google.com/youtube/answer/9314415).
 
 ## Versioned strategy supplied as deployment context
 
+The deployment owner will provide the actual editorial strategy. It is pending;
+no private brand strategy or acceptance baseline is fabricated by this design.
+
+
 The operator/broker supplies a private strategy package, initially approved by a
 human. Edie may propose changes but cannot activate a different strategy merely to
 make an evaluation pass. Pin a version/hash per job; a human-directed refresh starts

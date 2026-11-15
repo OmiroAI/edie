@@ -82,9 +82,10 @@ cannot substitute for structural, timing or dependency validation.
 
 ## Handoff and human return
 
-Export FCP7 XML through a tested adapter, plus SRT, linked media/assets and MP4
-preview, as specified in [handoff and feedback](handoff-feedback.md). XML is the
-Premiere boundary; OTIO remains Edie's canonical representation. Validate a basic
+Use the selected [finishing-editor profile](editor-adapters.md). The first planned
+profile is FCP7 XML plus SRT, linked media/assets and MP4 preview, as specified in
+[handoff and feedback](handoff-feedback.md). Other formats/editors remain open;
+OTIO remains Edie's canonical representation. Validate a basic
 cut first, then expand the round-trip matrix feature by feature.
 
 Import returned XML to a new human-authored OTIO revision. Reconcile clip IDs and

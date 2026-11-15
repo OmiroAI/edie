@@ -4,6 +4,9 @@ Status: target contract, not implemented by the current render worker. One Edie
 deployment is one agent with its own private editorial context. Video jobs are
 persistent goals; render/index tasks are tools the agent can choose to use.
 
+The proposed [versioned message and tool contracts](agent-contracts.md) specify
+inputs, outputs, checkpoints and human-approval transitions for PR review.
+
 ## Decision cycle
 
 ```mermaid
