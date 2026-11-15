@@ -7,3 +7,6 @@ assets/
 __pycache__/
 *.egg-info/
 .venv/
+
+config/
+context/

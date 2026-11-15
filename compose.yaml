@@ -1,5 +1,6 @@
 x-runtime: &runtime
   build: .
+  user: "${EDIE_UID:-10001}:${EDIE_GID:-10001}"
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
@@ -9,21 +10,26 @@ services:
   edie:
     <<: *runtime
     profiles: [cli]
+    environment:
+      EDIE_CONFIG_DIR: /config
     network_mode: none
     volumes:
       - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
       - ${EDIE_STATE:?Set private state directory}:/state
+      - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
   api:
     <<: *runtime
     entrypoint: [python, -m, edie.api]
     environment:
       EDIE_STATE: /state
+      EDIE_CONFIG_DIR: /config
       EDIE_BIND: 0.0.0.0
       EDIE_API_TOKEN: ${EDIE_API_TOKEN:?Set private management token}
     ports: ["127.0.0.1:${EDIE_PORT:-8080}:8080"]
     networks: [management]
     volumes:
       - ${EDIE_STATE:?Set private state directory}:/state
+      - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
   worker:
     <<: *runtime
     entrypoint: [python, -m, edie.worker, --state, /state, --media, /media]

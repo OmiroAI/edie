@@ -27,12 +27,13 @@ No remote storage, model requests, publishing or paid fallback occurs.
 
 ## Container lifecycle
 
-Set EDIE_MEDIA and EDIE_STATE to explicit absolute host directories. The state
-directory must be writable by UID 10001. Keep runtime configuration private.
+Set EDIE_MEDIA, EDIE_STATE and EDIE_CONFIG_DIR to explicit absolute host directories.
+Initialise private context using [configuration and memory](docs/configuration.md).
+Set EDIE_UID/EDIE_GID to their owner (default 10001). Keep runtime configuration private.
 
 ```
 docker compose build
-docker compose run --rm docker compose run --rm edie render REVISION_ID --media /media
+docker compose run --rm edie render REVISION_ID --media /media
 ```
 
 The CLI and worker containers have no network, Docker socket or host credentials.
@@ -51,7 +52,8 @@ jobs are unfinished. API and worker services are available in Compose; no produc
 One deployment owns one private editorial context; video jobs are its stories.
 There is no project-creation step.
 
-See [agent contracts for review](docs/agent-contracts.md),
+See [private configuration, SOUL and MEMORY](docs/configuration.md),
+[agent contracts for review](docs/agent-contracts.md),
 [finishing-editor adapters](docs/editor-adapters.md), [OTIO timeline design](docs/timeline.md), [strategy and evaluation](docs/strategy-evaluation.md),
 [handoff and feedback](docs/handoff-feedback.md), [agentic loop](docs/agent-loop.md), [storage policy](docs/storage.md), [model access](docs/model-access.md),
 [system design](docs/system.md), [API contract](docs/api.md),

@@ -5,3 +5,6 @@ media
 assets
 .venv
 __pycache__
+
+config/
+context/

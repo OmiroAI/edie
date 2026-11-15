@@ -46,6 +46,12 @@ Each deployment owns one editorial context. There are no project routes or proje
 IDs; POST /jobs accepts only a brief, without a project selector. Jobs are individual
 stories, while source metadata is reusable across jobs in this deployment.
 
+With `EDIE_CONFIG_DIR` configured, job creation pins the active context's hash,
+strategy ID and version in the job's `context` field. Private SOUL/MEMORY text is
+not returned in job records. Missing or invalid context rejects creation.
+Context installation and activation are operator CLI actions, not API routes.
+See [configuration](configuration.md) for snapshot and rollback semantics.
+
 Pre-change development databases containing project records are rejected at startup
 rather than silently merging their contexts. Preserve the original state directory
 and use a fresh state directory for this development version. No automatic data

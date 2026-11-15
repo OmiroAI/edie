@@ -1,3 +1,4 @@
+import os
 import hashlib
 import math
 import re
@@ -9,7 +10,10 @@ from pathlib import Path
 
 
 class Store:
-    def __init__(self, root):
+    def __init__(self, root, config_dir=None):
+        from .context import Context
+        directory = config_dir or os.getenv('EDIE_CONFIG_DIR')
+        self.context = Context(directory) if directory else None
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.root / 'edie.sqlite')
@@ -39,7 +43,15 @@ class Store:
             raise ValueError('Brief fields must be nonempty text')
         if isinstance(brief['duration'], bool) or not isinstance(brief['duration'], (int, float)) or not math.isfinite(brief['duration']) or brief['duration'] <= 0:
             raise ValueError('Duration must be positive seconds')
-        return self.put('job', {'brief': brief})
+        context = self.context.active() if self.context else None
+        return self.put('job', {'brief': brief, 'context': context})
+
+    def job_context(self, job):
+        record = self.get(job, 'job')
+        reference = record.get('context')
+        if not reference or not self.context:
+            raise ValueError('Job has no configured context')
+        return self.context.load(reference['hash'])
 
     def revision(self, job, clips):
         self.get(job, 'job')
