@@ -15,6 +15,9 @@ def tick(root,config,media,socket,routes=None,sandbox_socket=None):
     try:
         for job, in store.db.execute('SELECT job FROM workflows').fetchall():
             state=flow.get(job)
+            if state['control']=='active':
+                from .intake import reconcile
+                reconcile(store,job)
             ready=state.get('requested_run',False)
             if state.get('pending_index_tasks') and all(tasks.get(task)['state']=='completed' for task in state['pending_index_tasks']):
                 state=flow.update(job,state['version'],dict(pending_index_tasks=[],requested_run=True))

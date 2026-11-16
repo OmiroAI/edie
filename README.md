@@ -58,7 +58,8 @@ no production deployment has been performed.
 One deployment owns one private editorial context; video jobs are its stories.
 There is no project-creation step.
 
-See [adaptive visual indexing](docs/adaptive-visual-index.md),
+See [ranked automatic intake](docs/ranked-intake.md),
+[adaptive visual indexing](docs/adaptive-visual-index.md),
 [editorial review workspace](docs/editorial-workspace.md),
 [implemented runtime workflow and current limits](docs/runtime-workflow.md),
 [private configuration, SOUL and MEMORY](docs/configuration.md),

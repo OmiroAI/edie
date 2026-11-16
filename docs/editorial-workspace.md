@@ -68,7 +68,7 @@ state transitions, not a fabricated completion percentage or token stream.
 
 ## Intake, segment review and story gate
 
-Files have explicit Keep / Exclude / Unreviewed decisions. Editorial roles, Blooper,
+Files have Edie-first Keep / Exclude / Needs-review decisions, with human overrides. Editorial roles, Blooper,
 intrinsic usefulness and brief-fit scores belong to source-linked segments. Human
 Available / Selected / Rejected decisions are separate from roles. Whole-file role
 classification, its editing endpoint and runtime legacy-label translations have been
@@ -82,7 +82,8 @@ model request. Saving both bounds is atomic and revision-checked. Adjacent range
 adjust; first/last trims retain reviewable remainder segments. Unsaved drafts block
 footage confirmation. Source playback is for review, not frame-accurate finishing.
 
-All files require intake and every kept source needs segments before confirming the
+Flagged files require human intake; confident automatic decisions are accepted without
+a per-file click. Every kept source needs segments before confirming the
 exact selection. Excluded sources and rejected segments cannot enter scripts. New
 scripts reference segment IDs, bounds and trims; changed segment boundaries require
 fresh review. Confirmation allows story proposals, not script or render approval.
@@ -94,3 +95,6 @@ analysis need not change a job's story stage. The dashboard polls counts without
 replacing unsaved forms or interrupting playback; refresh loads newly prepared rows.
 
 Current state projection, independent story outputs, file properties and responsive layout are documented in [editorial progress and outputs](editorial-progress-and-outputs.md).
+
+See [ranked automatic intake](ranked-intake.md) for the implemented decision policy,
+review threshold, low-to-high review mode and in-player source playback.

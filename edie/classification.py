@@ -51,7 +51,7 @@ def review_state(store,job,values=None,repo=None):
     rows=[];missing=[];excluded=[]
     for key,value in sorted(values.items()):
         entry=value['source'];record=repo.get(job,entry);effective=record['effective'];decision=file_decision(record)
-        if decision=='unreviewed':missing.append(key)
+        if needs_review(record):missing.append(key)
         if decision=='exclude':excluded.append(key)
         parts=segments.get(job,entry)['items']
         if segment_mode and decision!='exclude' and not parts and key not in missing:missing.append(key)
@@ -62,7 +62,14 @@ def review_state(store,job,values=None,repo=None):
 
 
 def file_decision(record):
-    """Explicit intake only; migrations are operator operations, not runtime fallbacks."""
-    value=record.get('override')
+    """Human decisions take precedence over versioned automatic intake."""
+    value=record.get('override') or (record.get('suggestion') if (record.get('suggestion') or {}).get('intake_profile')==1 else None)
     if not value:return 'unreviewed'
     return value['disposition']
+
+
+def needs_review(record):
+    if record.get('override'):
+        return record['override']['disposition']=='unreviewed'
+    suggestion=record.get('suggestion') or {}
+    return suggestion.get('intake_profile')!=1 or suggestion.get('review_required',True)

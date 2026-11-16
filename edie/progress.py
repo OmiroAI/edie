@@ -17,7 +17,9 @@ def tasks_for(store,job):
 
 
 def summarize(state,rows,tasks,review):
-    total=len(rows);unreviewed=sum(r.get('disposition')=='unreviewed' for r in rows)
+    total=len(rows);unreviewed=sum(r.get('review_required',r.get('disposition')=='unreviewed') for r in rows)
+    pending_intake=sum(r.get('intake_status')=='pending' for r in rows)
+    human_review=max(0,unreviewed-pending_intake)
     eligible=[r for r in rows if r.get('disposition')!='exclude'];prepared=sum(bool(r.get('segments',{}).get('items')) for r in eligible)
     dense=sum(bool(r.get('coverage',{}).get('profile')) for r in rows if isinstance(r.get('coverage'),dict))
     active=[t for t in tasks if t['state'] in ('running','queued','pause_requested','paused')]
@@ -32,7 +34,7 @@ def summarize(state,rows,tasks,review):
     rendered=any(t['state']=='completed' and t.get('result',{} ) and t['result'].get('kind')=='reference_preview' and t['payload'].get('revision')==state.get('revision') for t in tasks)
     steps=[]
     def step(key,label,status,detail):steps.append(dict(key=key,label=label,status=status,detail=detail))
-    step('footage','Footage','working' if index_active else 'review' if unreviewed else 'ready' if total else 'pending',f'{total-unreviewed}/{total} file decisions · {dense}/{total} dense indexes')
+    step('footage','Footage','working' if index_active else 'review' if unreviewed else 'ready' if total else 'pending',f'{total-unreviewed}/{total} decided · {human_review} need review · {pending_intake} analysing')
     segment_status='pending' if not total or index_active else 'working' if segment_active else 'pending' if prepared<len(eligible) else 'ready' if confirmed else 'review'
     step('segments','Segments',segment_status,f'{prepared}/{len(eligible)} sources prepared'+(' · waiting for indexing' if index_active else ' · selection confirmed' if confirmed else ' · review and confirm selection'))
     story_status='pending' if not confirmed else 'queued' if agent_requests and not approved else 'ready' if approved else 'review' if script and not state.get('needs_story_options') else 'pending'
@@ -41,7 +43,8 @@ def summarize(state,rows,tasks,review):
     cut_status='ready' if final else 'review' if rendered or state.get('delivery') else 'working' if approved and any(t['payload']['action']=='render' and t['state']=='running' for t in active) else 'queued' if approved and (agent_requests or any(t['payload']['action']=='render' and t['state']=='queued' for t in active)) else 'pending'
     step('review','Cuts',cut_status,'Delivery approved' if final else 'Review export / delivery' if cut_status=='review' else 'Editing or rendering requested' if cut_status in ('working','queued') else 'Waiting for script approval')
     step('activity','Activity','attention' if blocked else 'working' if running else 'queued' if queued or agent_requests else 'idle',f'{running} running · {queued} queued tasks · {agent_requests} agent requests · {len(failures)} failed')
-    if unreviewed:action=dict(tab='footage',label='Review file intake',detail=f'{unreviewed} files need Keep / Exclude decisions.')
+    if human_review:action=dict(tab='footage',label='Review flagged files',detail=f'{human_review} files need your judgement. Review starts at the lowest rank.')
+    elif pending_intake:action=dict(tab='footage',label='View Edie’s intake',detail=f'{pending_intake} files await indexing or semantic analysis.')
     elif not confirmed:action=dict(tab='segments',label='Review segments',detail='Review prepared moments, then confirm selection in Footage.' if prepared else 'Segment preparation must finish before selection can be confirmed.')
     elif not approved:action=dict(tab='story',label='Review stories',detail='Choose a proposal, create an output and approve its script.' if script else 'Waiting for Edie to propose stories.')
     else:action=dict(tab='review',label='Review cut',detail='Watch the current export and give feedback.' if rendered else 'Your approved script is awaiting an edit.')
@@ -54,10 +57,11 @@ def summarize(state,rows,tasks,review):
     elif running:mode='working';headline='Edie is working'
     elif queued or state.get('requested_run'):mode='queued';headline='Work is queued for Edie'
     elif final:mode='ready';headline='Output approved'
+    elif pending_intake and not human_review:mode='queued';headline='Waiting for intake analysis'
     else:mode='review';headline='Your review is needed'
     phase='complete' if final else 'footage' if unreviewed or not total else 'segments' if not confirmed else 'stories' if not approved else 'complete' if final else 'cuts'
     return dict(phase=phase,mode=mode,headline=headline,working=running>0,needs_intervention=blocked or paused,action=action,steps=steps,
-                counts=dict(sources=total,dense=dense,unreviewed=unreviewed,segment_sources=prepared,segments=sum(len(r.get('segments',{}).get('items',[])) for r in rows),running=running,queued=queued,agent_requests=agent_requests,failed=len(failures)),raw_stage=state.get('stage'))
+                counts=dict(sources=total,dense=dense,unreviewed=unreviewed,pending_intake=pending_intake,human_review=human_review,segment_sources=prepared,segments=sum(len(r.get('segments',{}).get('items',[])) for r in rows),running=running,queued=queued,agent_requests=agent_requests,failed=len(failures)),raw_stage=state.get('stage'))
 
 
 def progress(store,job,state=None):
