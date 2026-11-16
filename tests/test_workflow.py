@@ -11,7 +11,7 @@ class WorkflowTest(unittest.TestCase):
     def test_approval_versions_dedup_and_control(self):
         with tempfile.TemporaryDirectory() as d:
             store=Store(d);job=store.job(dict(goal='Test',audience='Test',format='16:9',duration=10,language='en'))
-            w=Workflow(store);w.start(job)
+            w=Workflow(store);w.start(job,footage_review_required=False)
             script={'clips':[]};w.update(job,0,dict(script=script,stage='review_script'))
             with self.assertRaises(ValueError):w.event(job,'bad',1,'approve',dict(scope='script',candidate='wrong'))
             payload=dict(scope='script',candidate=identity(script))
@@ -29,7 +29,7 @@ class WorkflowTest(unittest.TestCase):
     def test_supplied_script_invalidates_approval_until_reconciled(self):
         with tempfile.TemporaryDirectory() as d:
             store=Store(d);job=store.job(dict(goal='Test',audience='Test',format='16:9',duration=10,language='en'))
-            flow=Workflow(store);flow.start(job)
+            flow=Workflow(store);flow.start(job,footage_review_required=False)
             script={'title':'Original','clips':[]}
             flow.update(job,0,dict(script=script,stage='review_script'))
             flow.event(job,'approve-original',1,'approve',dict(scope='script',candidate=identity(script)))
@@ -55,7 +55,8 @@ class WorkflowTest(unittest.TestCase):
                     tool='read_sources';args={'source_ids':['source']}
                 else:
                     self.assertion='visible test' in prompt
-                    tool='propose_script';args=dict(title='A grounded story',angle='A useful demo',clips=[dict(source_id='source',**{'in':0,'out':2},purpose='hook')],missing_footage=[],review_notes=[])
+                    tool='propose_stories';proposal=dict(title='A grounded story',angle='A useful demo',clips=[dict(source_id='source',**{'in':0,'out':2},purpose='hook')],missing_footage=[],review_notes=[])
+                    args={'proposals':[proposal,{**proposal,'title':'Another story','angle':'A curious observation'}]}
                 return dict(summary='Evidence-based decision',plan=['Review source','Develop story'],action='invoke_tool',tool=tool,arguments=json.dumps(args),question=None),dict(known_cost_micro_usd=0)
         with tempfile.TemporaryDirectory() as d:
             config=Path(d)/'config';context=Context(config)
@@ -64,6 +65,11 @@ class WorkflowTest(unittest.TestCase):
             store=Store(Path(d)/'state',config);job=store.job(dict(goal='Test',audience='Test',format='16:9',duration=10,language='en'))
             path=store.root/'index'/'fixture';path.mkdir(parents=True)
             (path/'index.json').write_text(json.dumps(dict(source=dict(source_id='source',version='1',sha256='a'*64,path='test.mp4'),duration=3,transcript=[dict(id='s',start=0,end=2,text='visible test')],visual=[],usage=[],media={})))
+            from edie.classification import Classifications,review_state
+            entry=dict(source_id='source',version='1',sha256='a'*64,path='test.mp4')
+            Classifications(store).save(job,entry,dict(labels=['a_roll'],reason='Verified demo.'),0,True)
+            flow=Workflow(store);flow.start(job)
+            flow.event(job,'confirm-fixture',0,'confirm_footage',{'candidate':review_state(store,job)['candidate']})
             decider=Decider();agent=Agent(store,Path(d),decider)
             result=agent.run(job)
             self.assertEqual(result['stage'],'review_script');self.assertTrue(decider.assertion);self.assertEqual(decider.calls,2)
@@ -76,7 +82,7 @@ class WorkflowTest(unittest.TestCase):
     def test_human_master_precedence_and_derivative_gate(self):
         with tempfile.TemporaryDirectory() as d:
             s=Store(d);brief=dict(goal='Test',audience='Test',format='16:9',duration=10,language='en');j=s.job(brief)
-            w=Workflow(s);w.start(j)
+            w=Workflow(s);w.start(j,footage_review_required=False)
             with self.assertRaises(ValueError):s.derivative(j,brief)
             script={'clips':[]};w.update(j,0,dict(script=script))
             w.event(j,'s',1,'approve',dict(scope='script',candidate=identity(script)))

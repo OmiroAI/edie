@@ -128,6 +128,10 @@ def handler(root, token):
                         state = Workflow(store).get(path[1])
                         from .usage import summary
                         state['usage_summary'] = summary(state['usage'])
+                        from .classification import review_state
+                        state['footage_review']=review_state(store,path[1])
+                        state['footage_review']['confirmed']=state.get('footage_confirmation')==state['footage_review']['candidate']
+
                         proposals=list(state.get('script_proposals',[]))
                         if state.get('script') and not any(identity(p)==identity(state['script']) for p in proposals):proposals.append(state['script'])
                         state['script_proposals']=proposals
@@ -151,6 +155,14 @@ def handler(root, token):
                     body = json.loads(self.rfile.read(length), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite number')))
                     if not isinstance(body, dict):
                         raise ValueError('Object body required')
+                    if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='classification':
+                        from .editorial import indexes
+                        from .classification import Classifications
+                        from urllib.parse import unquote
+                        entry=indexes(store,path[1])[unquote(path[3])]['source']
+                        if body['source_version']!=entry['version'] or body['source_sha256']!=entry['sha256']:raise ValueError('Source version changed')
+                        value=None if body.get('reset') is True else dict(labels=body['labels'],reason=body['reason'],origin='human')
+                        return self.respond(200,Classifications(store).save(path[1],entry,value,body['expected_revision'],human=True,actor='dashboard-operator'))
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='proxy':
                         from .editorial import request_proxy
                         from urllib.parse import unquote

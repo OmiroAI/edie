@@ -18,9 +18,9 @@ class Workflow:
         CREATE TABLE IF NOT EXISTS invocations(job TEXT,request_key TEXT,input_hash TEXT,state TEXT,result TEXT,PRIMARY KEY(job,request_key));
         ''')
 
-    def start(self,job,limits=None):
+    def start(self,job,limits=None,footage_review_required=True):
         self.store.get(job,'job')
-        body=dict(stage='indexing',requested_run=False,run_id=uuid.uuid4().hex,plan=[],script=None,revision=None,delivery=None,
+        body=dict(footage_review_required=footage_review_required,stage='indexing',requested_run=False,run_id=uuid.uuid4().hex,plan=[],script=None,revision=None,delivery=None,
                   approvals={},accepted_master=None,accepted_revision=None,feedback=[],turns=0,usage=[],limits=limits or dict(turns=30,cost_micro_usd=20000000),control='active')
         with self.db:self.db.execute('INSERT OR IGNORE INTO workflows VALUES (?,0,?)',(job,json.dumps(body)))
         return self.get(job)
@@ -47,6 +47,11 @@ class Workflow:
         from .tasks import Tasks
         Tasks(self.db)
         request=dict(job=job,expected=expected,kind=kind,payload=payload,actor=actor);key=identity(request)
+        if kind in ('approve','confirm_footage'):
+            from .classification import Classifications,review_state
+            from .editorial import indexes
+            review_values=indexes(self.store,job);review_repo=Classifications(self.store)
+
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             existing=self.db.execute('SELECT input_hash,body FROM events WHERE id=?',(event_id,)).fetchone()
@@ -55,9 +60,24 @@ class Workflow:
                 return json.loads(existing[1])
             current=self.get(job)
             if current['version']!=expected:raise ValueError('Stale human event')
-            if kind=='approve':
+            if kind=='confirm_footage':
+                review=review_state(self.store,job,review_values,review_repo)
+                if not review['ready'] or review['included']==0 or payload['candidate']!=review['candidate']:raise ValueError('Classify all sources and review the current selection first')
+                current['footage_confirmation']=review['candidate']
+                current['question']=None
+                if not current.get('revision'):
+                    current.update(stage='planning',needs_story_options=True,script_changes_pending=True,approvals={})
+                else:current['stage']='reconciling'
+            elif kind=='approve':
+                if current.get('footage_review_required',True):
+                    review=review_state(self.store,job,review_values,review_repo)
+                    if not review['ready'] or current.get('footage_confirmation')!=review['candidate']:raise ValueError('Confirm footage selection first')
                 if current.get('script_changes_pending'):raise ValueError('Review the reconciled script before approving')
                 scope=payload['scope'];candidate=payload['candidate']
+                if scope=='script' and current.get('needs_story_options'):raise ValueError('Story options are not ready')
+                if scope=='script' and current.get('footage_review_required',True):
+                    if any(c.get('source_id') in review['excluded'] or c.get('source_id') not in review_values for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script contains rejected or out-of-scope footage')
+
                 field={'script':'script','main':'revision','final':'delivery'}.get(scope)
                 if not field or not current[field] or identity(current[field])!=candidate:raise ValueError('Approval does not match candidate')
                 if scope in ('main','final') and (not current.get('validation') or current['validation'].get('decode')!='passed'):raise ValueError('Validation required')
@@ -140,7 +160,7 @@ class Workflow:
                 for item in order[order.index(scope):]:current['approvals'].pop(item,None)
                 current['stage']='review_'+scope
             else:raise ValueError('Unknown human event')
-            current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction')
+            current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction','confirm_footage')
             current.pop('job');current.pop('version')
             result={'id':event_id,'job':job,'version':expected+1,'kind':kind,'payload':payload,'received_at':time.time(),'actor':actor}
             self.db.execute('INSERT INTO events VALUES (?,?,?,?)',(event_id,job,key,json.dumps(result)))

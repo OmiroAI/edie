@@ -33,6 +33,10 @@ class EditorialTest(unittest.TestCase):
             self.assertEqual(footage(store,job)[0]['proxy_state'],'completed')
             token='fixture-token-'*4;server=HTTPServer(('127.0.0.1',0),handler(store.root,token));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
+                url='/jobs/'+job+'/sources/allowed/classification'
+                payload=dict(source_version='v1',source_sha256=entry['sha256'],expected_revision=0,labels=['b_roll','star'],reason='Useful illustrative footage.')
+                for body,expected in [(payload,200),(payload,400),({**payload,'expected_revision':1,'source_version':'stale'},400),({**payload,'expected_revision':1,'reset':True},200)]:
+                    conn=http.client.HTTPConnection(*server.server_address);conn.request('POST',url,body=json.dumps(body),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'});response=conn.getresponse();self.assertEqual(response.status,expected);response.read();conn.close()
                 for byte_range,status,length in [('bytes=0-9',206,10),('bytes=-10',206,10),('bytes=999999999-',416,0),('bytes=oops',416,0)]:
                     conn=http.client.HTTPConnection(*server.server_address);conn.request('GET','/tasks/'+task['id']+'/artifact',headers={'Authorization':'Bearer '+token,'Range':byte_range});response=conn.getresponse();data=response.read();self.assertEqual(response.status,status);self.assertEqual(len(data),length);conn.close()
                 conn=http.client.HTTPConnection(*server.server_address);conn.request('GET','/tasks/'+task['id']+'/artifact');response=conn.getresponse();self.assertEqual(response.status,401);response.read();conn.close()
@@ -40,7 +44,7 @@ class EditorialTest(unittest.TestCase):
 
     def test_proposal_selection_reorder_and_revision_guard(self):
         with tempfile.TemporaryDirectory() as d:
-            store=Store(d);job=store.job(dict(goal='Test',audience='Editors',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job)
+            store=Store(d);job=store.job(dict(goal='Test',audience='Editors',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job,footage_review_required=False)
             script=dict(title='First',clips=[{'in':0,'out':1},{'in':2,'out':3}])
             flow.update(job,0,dict(script=script,stage='review_script',approvals={'script':identity(script)}))
             flow.event(job,'reorder',1,'arrange_script',dict(candidate=identity(script),order=[1,0]))

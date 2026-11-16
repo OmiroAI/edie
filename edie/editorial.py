@@ -18,6 +18,8 @@ def indexes(store, job):
 
 def footage(store, job):
     values = indexes(store, job)
+    from .classification import Classifications
+    classifications=Classifications(store)
     Tasks(store.db)
     rows = []
     proxy_tasks = [Tasks(store.db).get(row[0]) for row in store.db.execute('SELECT id FROM tasks WHERE job=? ORDER BY rowid DESC', (job,)).fetchall()]
@@ -25,7 +27,7 @@ def footage(store, job):
         entry = value['source']
         task = next((t for t in proxy_tasks if t['payload'].get('action') == 'review_proxy' and t['payload'].get('sha256') == entry['sha256']), None)
         rows.append(dict(source_id=key, path=entry['path'], version=entry['version'], sha256=entry['sha256'],
-                         duration=value['duration'], transcript=value['transcript'], visual=value['visual'],
+                         duration=value['duration'], transcript=value['transcript'], visual=value['visual'], classification=classifications.get(job,entry),
                          coverage=value.get('coverage'), timing_issues=len(value.get('transcript_issues', [])),
                          summary=' '.join(v['observations'] for v in value['visual'])[:800],
                          proxy_task=task['id'] if task else None, proxy_state=task['state'] if task else 'not_requested'))

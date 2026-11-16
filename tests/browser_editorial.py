@@ -10,6 +10,7 @@ from edie.api import Server,handler
 from edie.core import Store,digest
 from edie.index import Catalogue
 from edie.workflow import Workflow
+from edie.classification import Classifications
 from edie.editorial import request_proxy
 from edie.worker import run_once
 from playwright.sync_api import sync_playwright
@@ -19,9 +20,14 @@ with tempfile.TemporaryDirectory() as temp:
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-t','4','-c:v','libx264',str(media/'demo.mp4')],check=True)
     store=Store(root/'state');entry=dict(source_id='source-1',version='1',sha256=digest(media/'demo.mp4'),path='demo.mp4');Catalogue(store).ingest([entry],media)
     folder=store.root/'index'/'source';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=entry,duration=4,transcript=[dict(start=0,end=2,text='A surprising first impression.',timing_valid=True),dict(start=2,end=4,text='Here is the practical takeaway.',timing_valid=True)],visual=[dict(start=0,end=4,sampled_times=[1],observations='The presenter examines a compact camera on the table.')],coverage='Sparse overview')))
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-t','1','-c:v','libx264',str(media/'short.mp4')],check=True)
+    extra=dict(source_id='source-2',version='1',sha256=digest(media/'short.mp4'),path='short.mp4');Catalogue(store).ingest([entry,extra],media)
+    folder=store.root/'index'/'extra';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=extra,duration=1,transcript=[],visual=[])))
     for title in ['Unboxing a new perspective','Discoveries from the exhibition']:
-        job=store.job(dict(goal=title,audience='Curious viewers',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job)
+        job=store.job(dict(goal=title,audience='Curious viewers',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job,footage_review_required=title!='Unboxing a new perspective')
         script=dict(title=title,angle='Does a dedicated camera earn a place next to your phone?',clips=[{**entry,'in':0,'out':2,'purpose':'An unexpected first impression'},{**entry,'in':2,'out':4,'purpose':'The practical takeaway'}],duration=4,missing_footage=[],review_notes=['Verify the model name before export.'])
+        Classifications(store).save(job,entry,dict(labels=['a_roll','hook','star'],reason='Specific discovery and practical payoff.',score=90,confidence='medium',moments=[],origin='agent',star_rank=1))
+        Classifications(store).save(job,extra,dict(labels=['b_roll'],reason='Short illustrative insert.',score=30,confidence='medium',moments=[],origin='agent'))
         flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy')
     server=Server(('127.0.0.1',0),handler(store.root,'synthetic-browser-token-'*3));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     with sync_playwright() as p:
@@ -30,6 +36,10 @@ with tempfile.TemporaryDirectory() as temp:
         assert page.locator('#jobs button').count()==2
         page.get_by_role('button',name='Play source',exact=True).click();page.locator('video').wait_for();page.wait_for_function('() => document.querySelector("video").readyState>=2')
         page.get_by_label('Search transcript').fill('takeaway');assert page.locator('.cue').count()==1
+        page.get_by_text('Change classification',exact=True).click();page.get_by_label('B-roll',exact=True).check();page.get_by_label('A-roll',exact=True).uncheck();page.get_by_label('Classification reason').fill('Use this as illustrative coverage.');page.get_by_role('button',name='Save classification',exact=True).click();page.wait_for_function('() => document.querySelector(".source p").textContent.includes("illustrative coverage")')
+        page.get_by_label('Filter classification').select_option('a_roll');assert page.locator('.source').count()==0
+        page.get_by_label('Filter classification').select_option('b_roll');assert page.locator('.source').count()==2
+        page.get_by_label('Filter classification').select_option('all');page.get_by_label('Sort footage').select_option('longest');assert page.locator('.source strong').first.inner_text()=='demo.mp4';page.get_by_label('Sort footage').select_option('shortest');assert page.locator('.source strong').first.inner_text()=='short.mp4';page.get_by_label('Sort footage').select_option('selects')
         page.screenshot(path='/output/footage.png',full_page=True)
         page.get_by_role('button',name='Story & script',exact=True).click();assert page.locator('.beat').count()==2
         page.get_by_title('Move later',exact=True).first.click();page.get_by_role('button',name='Save new story order',exact=True).click();page.wait_for_function('() => document.querySelector(".beat h3").textContent==="The practical takeaway"')
@@ -41,6 +51,7 @@ with tempfile.TemporaryDirectory() as temp:
         page.locator('#intention').fill('Unsent job-specific note');page.locator('#jobs button').nth(1).click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Discoveries from the exhibition"');assert page.locator('#intention').input_value()==''
         page.locator('#jobs button').first.click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Unboxing a new perspective"');assert page.locator('#intention').input_value()=='Unsent job-specific note'
         page.set_viewport_size({'width':390,'height':844});page.get_by_role('button',name='Footage',exact=True).click();page.screenshot(path='/output/mobile.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.set_viewport_size({'width':1512,'height':1100});page.locator('#jobs button').nth(1).click();page.get_by_role('button',name='Confirm classifications → suggest stories',exact=True).wait_for();page.get_by_role('button',name='Confirm classifications → suggest stories',exact=True).click();page.wait_for_function('() => document.querySelector("#current-state").textContent.includes("planning")');page.get_by_role('button',name='Story & script',exact=True).click();page.get_by_role('heading',name='Edie is developing story options').wait_for()
         assert errors==[],errors
-        browser.close();print('Browser acceptance passed: playback, search, proposals, reorder, approval invalidation, job isolation, mobile layout; no JavaScript errors.')
+        browser.close();print('Browser acceptance passed: playback, search, classification overrides/filtering/duration sorting, proposals, reorder, approval invalidation, job isolation, mobile layout; no JavaScript errors.')
     server.shutdown();thread.join();server.server_close();store.db.close()

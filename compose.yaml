@@ -67,13 +67,17 @@ services:
   index-worker:
     <<: *runtime
     profiles: [agent]
-    entrypoint: [python, -m, edie.index_worker, --state, /state, --media, /media, --routes, /config/routes.json]
+    entrypoint: [python, -m, edie.index_worker, --state, /state, --media, /media, --routes, /config/routes.json, --classification-socket, /run/codex.sock]
+    environment:
+      EDIE_CONFIG_DIR: /config
     network_mode: none
     init: true
     volumes:
       - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
       - ${EDIE_STATE:?Set private state directory}:/state
       - ${EDIE_ROUTES_FILE:-./config/routes.json}:/config/routes.json:ro
+      - ${EDIE_CODEX_SOCKET:-./config/codex.sock}:/run/codex.sock
+      - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
       - ${EDIE_MODEL_SOCKET:-./config/models.sock}:/run/models.sock
   analysis:
     <<: *runtime

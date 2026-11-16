@@ -23,7 +23,7 @@ def stop(process):
             process.wait()
 
 
-def run_once(root, media, action="render", routes=None):
+def run_once(root, media, action="render", routes=None, classification_socket=None):
     store = Store(root)
     tasks = Tasks(store.db)
     owner = uuid.uuid4().hex
@@ -49,12 +49,13 @@ def run_once(root, media, action="render", routes=None):
             store.get(task['job'], 'job')
             command = [sys.executable, '-m', 'edie.index_worker', '--state', str(store.root),
                        '--media', str(Path(media).resolve()), '--routes', str(Path(routes).resolve()), '--task', task['id']]
+            if classification_socket:command+=['--classification-socket',classification_socket]
         else:
             raise ValueError('Unsupported worker capability')
         # No raw FFmpeg output is retained; it may include private source names.
         with tempfile.TemporaryFile() as output:
             process = subprocess.Popen(command, stdout=output, stderr=subprocess.DEVNULL,
-                                       start_new_session=True, env={k: v for k, v in os.environ.items() if k in ('PATH', 'LANG', 'PYTHONPATH')})
+                                       start_new_session=True, env={k: v for k, v in os.environ.items() if k in ('PATH', 'LANG', 'PYTHONPATH', 'EDIE_CONFIG_DIR')})
             while True:
                 state = tasks.heartbeat(task['id'], owner)
                 if state in ('pause_requested', 'cancel_requested'):
