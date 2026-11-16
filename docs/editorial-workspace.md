@@ -2,23 +2,24 @@
 
 The browser is an editorial control room. Edie owns rendering and detailed editing;
 humans inspect evidence, select a story, adjust structure, give direction and approve.
-The interface has one job list and four views:
+The interface has one job list, a shared-library/output selector and five progressive views:
 
 - Footage: source names, durations, searchable original transcripts, sparse visual
   observations, coverage warnings and lightweight source playback. Source timestamps
   seek the player. Observations are labelled sampled, not exhaustive.
-- Story: retained script proposals, current selection, source-linked story beats,
+- Segments: classified/ranked source ranges with visual boundary review and shared selection.
+- Stories: retained script proposals, current selection, source-linked story beats,
   move-earlier/later structural changes and sequential source playback. This sequence
   preview is a browser assembly, not a rendered cut: no effects, graphics or subtitles.
   Script selection organizes the view without renaming or moving original files.
-- Review: actual rendered MP4, validation findings and timestamped feedback bound to
+- Cuts: actual rendered MP4, validation findings and timestamped feedback bound to
   its revision. Main/final approval remain distinct from script approval.
 - Activity: actual task states, workflow plan, human events, usage and failures. The
   direction box submits a durable instruction bound to the observed state version.
 
 Deployment can configure `EDIE_REVIEW_WORKSPACES` as JSON entries with `label` and
-same-origin `prefix`. One dashboard aggregates jobs from these API namespaces. This
-is a compatibility bridge for existing separate state roots, not a new project model.
+same-origin `prefix`. One dashboard aggregates jobs from these API namespaces. These
+are configured private API namespaces, not a new project model.
 Each backend retains its own state, context and authorisation. Reverse proxies must
 strip each prefix. No cross-origin tokens or public media URLs are introduced.
 
@@ -91,3 +92,5 @@ API and reasoning design in [editorial segments](editorial-segments.md).
 Indexing/segmentation counts appear independently of the editorial stage. Running
 analysis need not change a job's story stage. The dashboard polls counts without
 replacing unsaved forms or interrupting playback; refresh loads newly prepared rows.
+
+Current state projection, independent story outputs, file properties and responsive layout are documented in [editorial progress and outputs](editorial-progress-and-outputs.md).

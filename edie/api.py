@@ -75,13 +75,20 @@ def handler(root, token):
                 if self.command == 'GET':
                     if path == ['workspaces']:
                         return self.respond(200,json.loads(os.getenv('EDIE_REVIEW_WORKSPACES','[{"label":"Edie","prefix":""}]')))
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='outputs':
+                        from .outputs import listing
+                        return self.respond(200,listing(store,path[1]))
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='progress':
+                        from .progress import progress
+                        return self.respond(200,progress(store,path[1]))
                     if len(path)==3 and path[0]=='jobs' and path[2]=='footage':
                         from .editorial import footage
                         store.get(path[1],'job')
                         return self.respond(200,footage(store,path[1]))
                     if len(path)==3 and path[0]=='jobs' and path[2]=='tasks':
                         store.get(path[1],'job')
-                        return self.respond(200,[tasks.get(r[0]) for r in store.db.execute('SELECT id FROM tasks WHERE job=? ORDER BY rowid DESC',(path[1],)).fetchall()])
+                        from .progress import tasks_for
+                        return self.respond(200,tasks_for(store,path[1]))
                     if path == ['sources']:
 
                         return self.respond(200, Catalogue(store).list())
@@ -128,6 +135,8 @@ def handler(root, token):
                         state = Workflow(store).get(path[1])
                         from .usage import summary
                         state['usage_summary'] = summary(state['usage'])
+                        from .progress import progress
+                        state['progress']=progress(store,path[1],state)
                         from .classification import review_state
                         state['footage_review']=review_state(store,path[1])
                         state['footage_review']['confirmed']=state.get('footage_confirmation')==state['footage_review']['candidate']
@@ -147,7 +156,7 @@ def handler(root, token):
                         return self.respond(200, store.get(path[1], kinds[path[0]]))
                     if len(path) == 1 and path[0] in kinds:
                         rows = store.db.execute('SELECT id,body FROM records WHERE kind=?', (kinds[path[0]],)).fetchall()
-                        return self.respond(200, [{'id': r[0], **json.loads(r[1])} for r in rows])
+                        return self.respond(200, [{'id': r[0], **json.loads(r[1])} for r in rows if path[0]!='jobs' or not json.loads(r[1]).get('output_of')])
                 elif self.command == 'POST':
                     length = int(self.headers.get('Content-Length', '0'))
                     if not 0 < length <= 1024*1024:
@@ -155,7 +164,12 @@ def handler(root, token):
                     body = json.loads(self.rfile.read(length), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite number')))
                     if not isinstance(body, dict):
                         raise ValueError('Object body required')
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='outputs':
+                        from .outputs import create
+                        return self.respond(201,create(store,path[1],body))
                     if len(path)==3 and path[0]=='jobs' and path[2]=='segment-tasks':
+                        from .scope import library_job
+                        path[1]=library_job(store,path[1])
                         from .editorial import indexes
                         values=indexes(store,path[1])
                         if not values:raise ValueError('Index sources first')

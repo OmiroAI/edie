@@ -7,7 +7,7 @@ import threading
 import subprocess
 from pathlib import Path
 from edie.api import Server,handler
-from edie.core import Store,digest
+from edie.core import Store,digest,probe
 from edie.index import Catalogue
 from edie.workflow import Workflow
 from edie.classification import Classifications
@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as temp:
     root=Path(temp);media=root/'media';media.mkdir()
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-t','4','-c:v','libx264',str(media/'demo.mp4')],check=True)
     store=Store(root/'state');entry=dict(source_id='source-1',version='1',sha256=digest(media/'demo.mp4'),path='demo.mp4');Catalogue(store).ingest([entry],media)
-    folder=store.root/'index'/'source';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=entry,duration=4,transcript=[dict(start=0,end=2,text='A surprising first impression.',timing_valid=True),dict(start=2,end=4,text='Here is the practical takeaway.',timing_valid=True)],visual=[dict(start=0,end=4,sampled_times=[1],observations='The presenter examines a compact camera on the table.')],coverage='Sparse overview')))
+    folder=store.root/'index'/'source';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=entry,duration=4,media=probe(media/'demo.mp4'),transcript=[dict(start=0,end=2,text='A surprising first impression.',timing_valid=True),dict(start=2,end=4,text='Here is the practical takeaway.',timing_valid=True)],visual=[dict(start=0,end=4,sampled_times=[1],observations='The presenter examines a compact camera on the table.')],coverage='Sparse overview')))
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-t','1','-c:v','libx264',str(media/'short.mp4')],check=True)
     extra=dict(source_id='source-2',version='1',sha256=digest(media/'short.mp4'),path='short.mp4');Catalogue(store).ingest([entry,extra],media)
     folder=store.root/'index'/'extra';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=extra,duration=1,transcript=[],visual=[])))
@@ -39,6 +39,9 @@ with tempfile.TemporaryDirectory() as temp:
         browser=p.chromium.launch(args=['--no-sandbox']);page=browser.new_page(viewport={'width':1512,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
         page.goto(f'http://127.0.0.1:{server.server_address[1]}/dashboard');page.locator('#token').fill('synthetic-browser-token-'*3);page.get_by_role('button',name='Open workspace').click();page.get_by_role('heading',name='Source library').wait_for()
         assert page.locator('#jobs button').count()==2
+        assert page.locator('.workflow-step').count()==5;assert 'Your review' in page.locator('#work-status').inner_text();assert '640 × 360' in page.locator('.file-properties').inner_text()
+        page.screenshot(path='/output/workspace-desktop.png',full_page=True)
+        page.set_viewport_size({'width':1024,'height':900});page.screenshot(path='/output/workspace-tablet.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.set_viewport_size({'width':1512,'height':1100})
         page.get_by_role('button',name='Play source',exact=True).click();page.locator('video').wait_for();page.wait_for_function('() => document.querySelector("video").readyState>=2')
         page.get_by_label('Search transcript').fill('takeaway');assert page.locator('.cue').count()==1
         page.get_by_role('button',name='File decision',exact=True).click();page.get_by_role('button',name='Keep',exact=True).click();page.get_by_label('File decision reason').fill('Available for editorial use.');page.get_by_role('button',name='Save file decision',exact=True).click();page.wait_for_function('() => document.querySelector(".source p").textContent.includes("Available for editorial")')
@@ -71,7 +74,7 @@ with tempfile.TemporaryDirectory() as temp:
         page.locator('#intention').fill('Unsent job-specific note');page.locator('#jobs button').nth(1).click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Discoveries from the exhibition"');assert page.locator('#intention').input_value()==''
         page.locator('#jobs button').first.click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Unboxing a new perspective"');assert page.locator('#intention').input_value()=='Unsent job-specific note'
         page.set_viewport_size({'width':390,'height':844});page.get_by_role('button',name='Footage',exact=True).click();page.screenshot(path='/output/mobile.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-        page.set_viewport_size({'width':1512,'height':1100});page.locator('#jobs button').nth(1).click();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).wait_for();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).click();page.wait_for_function('() => document.querySelector("#current-state").textContent.includes("planning")');page.get_by_role('button',name='Story & script',exact=True).click();page.get_by_role('heading',name='Edie is developing story options').wait_for()
+        page.set_viewport_size({'width':1512,'height':1100});page.locator('#jobs button').nth(1).click();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).wait_for();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).click();page.wait_for_function('() => state.stage==="planning"');page.get_by_role('button',name='Story & script',exact=True).click();page.get_by_role('heading',name='Edie is developing story options').wait_for()
         assert errors==[],errors
         browser.close();print('Browser acceptance passed: playback, search, classification overrides/filtering/duration sorting, proposals, reorder, approval invalidation, job isolation, mobile layout; no JavaScript errors.')
     server.shutdown();thread.join();server.server_close();store.db.close()

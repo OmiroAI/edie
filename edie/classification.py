@@ -13,12 +13,16 @@ class Classifications:
             CREATE TABLE IF NOT EXISTS classification_events(id INTEGER PRIMARY KEY,job TEXT,source_id TEXT,body TEXT);''')
 
     def get(self,job,entry):
+        from .scope import library_job
+        job=library_job(self.store,job)
         row=self.db.execute('SELECT revision,body FROM classifications WHERE job=? AND source_id=? AND version=? AND sha256=?',
                             (job,entry['source_id'],entry['version'],entry['sha256'])).fetchone()
         if not row:return dict(revision=0,suggestion=None,override=None,effective=None)
         body=json.loads(row[1]);return dict(revision=row[0],**body,effective=body.get('override') or body.get('suggestion'))
 
     def save(self,job,entry,value,expected=None,human=False,actor='indexer'):
+        from .scope import library_job
+        job=library_job(self.store,job)
         if human and (not isinstance(expected,int) or isinstance(expected,bool) or expected<0):raise ValueError('Classification version required')
         if value is not None:
             if 'disposition' in value and value['disposition'] not in ('keep','exclude','unreviewed'):raise ValueError('Invalid file disposition')

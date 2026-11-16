@@ -34,10 +34,14 @@ class Segments:
     def key(self,entry):return identity([entry['source_id'],entry['version'],entry['sha256']])
 
     def get(self,job,entry):
+        from .scope import library_job
+        job=library_job(self.store,job)
         row=self.db.execute('SELECT revision,body FROM segments WHERE job=? AND source_key=?',(job,self.key(entry))).fetchone()
         return dict(revision=row[0],**json.loads(row[1])) if row else dict(revision=0,items=[],human=False)
 
     def save(self,job,index,items,expected,human=True):
+        from .scope import library_job
+        job=library_job(self.store,job)
         if not isinstance(expected,int) or isinstance(expected,bool):raise ValueError('Segment revision required')
         if not isinstance(items,list) or not 1<=len(items)<=2000:raise ValueError('Invalid segment count')
         last=0;ids=set()

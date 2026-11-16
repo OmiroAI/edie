@@ -28,19 +28,44 @@ def footage(store, job):
     for path in sorted((store.root/'index').glob('*/progress.json'),key=lambda p:p.stat().st_mtime):
         value=json.loads(path.read_text())
         if value.get('source_id'):progress[value['source_id']]=value
-    proxy_tasks = [Tasks(store.db).get(row[0]) for row in store.db.execute('SELECT id FROM tasks WHERE job=? ORDER BY rowid DESC', (job,)).fetchall()]
+    from .scope import library_job
+    library=library_job(store,job)
+    proxy_tasks = [Tasks(store.db).get(row[0]) for row in store.db.execute('SELECT id FROM tasks WHERE job=? ORDER BY rowid DESC', (library,)).fetchall()]
     for key, value in values.items():
         entry = value['source']
         task = next((t for t in proxy_tasks if t['payload'].get('action') == 'review_proxy' and t['payload'].get('sha256') == entry['sha256']), None)
         rows.append(dict(source_id=key, path=entry['path'], version=entry['version'], sha256=entry['sha256'],
-                         disposition=file_decision(classifications.get(job,entry)), duration=value['duration'], transcript=value['transcript'], visual=value['visual'], classification=classifications.get(job,entry),
+                         properties=properties(value), disposition=file_decision(classifications.get(job,entry)), duration=value['duration'], transcript=value['transcript'], visual=value['visual'], classification=classifications.get(job,entry),
                          segments=segments.get(job,entry), coverage=value.get('coverage'), visual_progress=progress.get(key), cut_candidates=value.get('cut_candidates',[]), timing_issues=len(value.get('transcript_issues', [])),
                          summary=' '.join(v['observations'] for v in value['visual'])[:800],
                          proxy_task=task['id'] if task else None, proxy_state=task['state'] if task else 'not_requested'))
     return rows
 
 
+def properties(index):
+    from fractions import Fraction
+    media=index.get('media',{});streams=media.get('streams',[]);video=next((s for s in streams if s.get('codec_type')=='video'),{})
+    audio=[s for s in streams if s.get('codec_type')=='audio'];fmt=media.get('format',{})
+    def number(value):
+        try:return float(Fraction(str(value).replace(':','/')))
+        except (ValueError,ZeroDivisionError,TypeError):return None
+    width=video.get('width');height=video.get('height');rotation=number(video.get('tags',{}).get('rotate',0)) or 0
+    for data in video.get('side_data_list',[]):
+        if 'rotation' in data:rotation=number(data['rotation']) or 0
+    display_width=round(width*(number(video.get('sample_aspect_ratio','1:1')) or 1)) if width else None;display_height=height
+    if round(rotation)%180:display_width,display_height=display_height,display_width
+    orientation=None
+    if display_width and display_height:orientation='square' if display_width==display_height else 'portrait' if display_height>display_width else 'landscape'
+    size=number(fmt.get('size'))
+    return dict(size_bytes=int(size) if size is not None and size>=0 else None,width=width,height=height,display_width=display_width,display_height=display_height,
+                rotation=rotation,orientation=orientation,fps=number(video.get('avg_frame_rate')),video_codec=video.get('codec_name'),
+                audio_tracks=len(audio) if streams else None,audio_codec=audio[0].get('codec_name') if audio else None,
+                hdr=video.get('color_transfer') in ('arib-std-b67','smpte2084'),pixel_format=video.get('pix_fmt'))
+
+
 def request_proxy(store, job, source_id):
+    from .scope import library_job
+    job=library_job(store,job)
     entry = indexes(store, job)[source_id]['source']
     payload = dict(action='review_proxy', source_id=source_id, version=entry['version'], sha256=entry['sha256'])
     identifier = Tasks(store.db).submit(job, 'review-proxy-v1:'+entry['sha256'], payload)

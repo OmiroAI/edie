@@ -96,3 +96,5 @@ are available at the authenticated `/tasks/ID/artifact` route. See the API and
 system documents for recovery limits and remaining production gaps.
 
 See [editorial segments](docs/editorial-segments.md) for source-linked segment classification and review.
+
+See [editorial progress and independent outputs](docs/editorial-progress-and-outputs.md) for dashboard states, shared job libraries, output isolation and file properties.
