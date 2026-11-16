@@ -122,3 +122,7 @@ GET workflow includes `footage_review` counts, excluded IDs, candidate digest, r
 and confirmation status. POST job events accepts `type:confirm_footage` with
 `payload:{candidate:...}` plus the existing event ID, state version and actor fields.
 Selecting this event wakes planning only after the exact reviewed selection matches.
+
+Manual classification is opened by the prominent **Edit labels** button beside
+**Play source** above the selected video's player. Saving labels preserves the
+agent suggestion separately and requires reconfirming the footage selection.
