@@ -101,3 +101,7 @@ queued status, file properties, range editing and desktop/tablet/phone layouts.
 Production job libraries remain subject to human footage/segment review; no live story
 or render approval is created by deployment. Finishing-application roundtrip and final
 editorial quality acceptance remain outstanding.
+
+Activity reports durable queued tasks separately from requested agent work. A requested
+edit remains Queued until a worker is observed running; requesting work alone is not
+evidence of an active render. Root job counts include requests on its outputs.

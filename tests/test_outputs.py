@@ -7,7 +7,7 @@ from edie.workflow import Workflow,identity
 from edie.classification import Classifications,review_state
 from edie.segments import Segments,propose
 from edie.outputs import create,listing
-from edie.progress import summarize
+from edie.progress import summarize,progress
 from edie.editorial import properties
 
 class OutputTest(unittest.TestCase):
@@ -34,6 +34,11 @@ class OutputTest(unittest.TestCase):
             flow.event(a,'approve-one',0,'approve',dict(scope='script',candidate=identity(one)))
             self.assertIn('script',flow.get(a)['approvals']);self.assertFalse(flow.get(b)['approvals']);self.assertFalse(flow.get(job)['approvals'])
             self.assertEqual(flow.get(b)['script']['title'],'Discovery two')
+            status=progress(store,job)
+            self.assertEqual(status['counts']['agent_requests'],1)
+            self.assertEqual(status['steps'][3]['status'],'queued')
+            self.assertEqual(status['steps'][4]['status'],'queued')
+            self.assertIn('1 agent requests',status['steps'][4]['detail'])
             original=Segments(store).get(a,entry);Segments(store).edit(a,index,dict(expected_revision=original['revision'],segment_id=original['items'][0]['id'],action='label',labels=['blooper'],selection='selected',reason='Useful personality'))
             self.assertEqual(Segments(store).get(b,entry)['items'][0]['labels'],['blooper'])
             self.assertNotEqual(review_state(store,b)['candidate'],flow.get(b)['footage_confirmation'])

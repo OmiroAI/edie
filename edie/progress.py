@@ -25,6 +25,7 @@ def summarize(state,rows,tasks,review):
     segment_active=[t for t in active if t['payload']['action']=='segment_index']
     failures=[t for t in tasks if t['state'] in ('failed','interrupted') and (t['payload']['action']!='render' or t['payload'].get('revision')==state.get('revision') or t.get('output_name'))]
     running=sum(t['state']=='running' for t in active);queued=sum(t['state']=='queued' for t in active)
+    agent_requests=int(bool(state.get('requested_run')))
     paused=state.get('control')=='paused' or any(t['state']=='paused' for t in active)
     blocked=bool(failures) or state.get('stage') in ('blocked','failed','uncertain')
     confirmed=review.get('confirmed',False);script=state.get('script');approved=bool(state.get('approvals',{}).get('script'))
@@ -34,12 +35,12 @@ def summarize(state,rows,tasks,review):
     step('footage','Footage','working' if index_active else 'review' if unreviewed else 'ready' if total else 'pending',f'{total-unreviewed}/{total} file decisions · {dense}/{total} dense indexes')
     segment_status='pending' if not total or index_active else 'working' if segment_active else 'pending' if prepared<len(eligible) else 'ready' if confirmed else 'review'
     step('segments','Segments',segment_status,f'{prepared}/{len(eligible)} sources prepared'+(' · waiting for indexing' if index_active else ' · selection confirmed' if confirmed else ' · review and confirm selection'))
-    story_status='pending' if not confirmed else 'working' if state.get('requested_run') and not approved else 'ready' if approved else 'review' if script and not state.get('needs_story_options') else 'pending'
-    step('story','Stories',story_status,'Script approved' if approved else 'Choose a story and create an output' if story_status=='review' else 'Planning requested' if story_status=='working' else 'Waiting for confirmed segments')
+    story_status='pending' if not confirmed else 'queued' if agent_requests and not approved else 'ready' if approved else 'review' if script and not state.get('needs_story_options') else 'pending'
+    step('story','Stories',story_status,'Script approved' if approved else 'Choose a story and create an output' if story_status=='review' else 'Planning requested' if story_status=='queued' else 'Waiting for confirmed segments')
     final=bool(state.get('approvals',{}).get('final'))
-    cut_status='ready' if final else 'review' if rendered or state.get('delivery') else 'working' if approved and (state.get('requested_run') or any(t['payload']['action']=='render' for t in active)) else 'pending'
-    step('review','Cuts',cut_status,'Delivery approved' if final else 'Review export / delivery' if cut_status=='review' else 'Editing or rendering requested' if cut_status=='working' else 'Waiting for script approval')
-    step('activity','Activity','attention' if blocked else 'working' if running else 'idle',f'{running} running · {queued} queued · {len(failures)} failed')
+    cut_status='ready' if final else 'review' if rendered or state.get('delivery') else 'working' if approved and any(t['payload']['action']=='render' and t['state']=='running' for t in active) else 'queued' if approved and (agent_requests or any(t['payload']['action']=='render' and t['state']=='queued' for t in active)) else 'pending'
+    step('review','Cuts',cut_status,'Delivery approved' if final else 'Review export / delivery' if cut_status=='review' else 'Editing or rendering requested' if cut_status in ('working','queued') else 'Waiting for script approval')
+    step('activity','Activity','attention' if blocked else 'working' if running else 'queued' if queued or agent_requests else 'idle',f'{running} running · {queued} queued tasks · {agent_requests} agent requests · {len(failures)} failed')
     if unreviewed:action=dict(tab='footage',label='Review file intake',detail=f'{unreviewed} files need Keep / Exclude decisions.')
     elif not confirmed:action=dict(tab='segments',label='Review segments',detail='Review prepared moments, then confirm selection in Footage.' if prepared else 'Segment preparation must finish before selection can be confirmed.')
     elif not approved:action=dict(tab='story',label='Review stories',detail='Choose a proposal, create an output and approve its script.' if script else 'Waiting for Edie to propose stories.')
@@ -56,7 +57,7 @@ def summarize(state,rows,tasks,review):
     else:mode='review';headline='Your review is needed'
     phase='complete' if final else 'footage' if unreviewed or not total else 'segments' if not confirmed else 'stories' if not approved else 'complete' if final else 'cuts'
     return dict(phase=phase,mode=mode,headline=headline,working=running>0,needs_intervention=blocked or paused,action=action,steps=steps,
-                counts=dict(sources=total,dense=dense,unreviewed=unreviewed,segment_sources=prepared,segments=sum(len(r.get('segments',{}).get('items',[])) for r in rows),running=running,queued=queued,failed=len(failures)),raw_stage=state.get('stage'))
+                counts=dict(sources=total,dense=dense,unreviewed=unreviewed,segment_sources=prepared,segments=sum(len(r.get('segments',{}).get('items',[])) for r in rows),running=running,queued=queued,agent_requests=agent_requests,failed=len(failures)),raw_stage=state.get('stage'))
 
 
 def progress(store,job,state=None):
@@ -70,8 +71,12 @@ def progress(store,job,state=None):
         from .outputs import listing
         for child in listing(store,job):
             detail=progress(store,child['id'])
-            result['outputs'].append(dict(id=child['id'],name=child['name'],mode=detail['mode'],headline=detail['headline'],phase=detail['phase'],steps=detail['steps']))
+            result['outputs'].append(dict(id=child['id'],name=child['name'],mode=detail['mode'],headline=detail['headline'],phase=detail['phase'],steps=detail['steps'],agent_requests=detail['counts']['agent_requests']))
         children=result['outputs']
+        result['counts']['agent_requests']+=sum(c['agent_requests'] for c in children)
+        counts=result['counts']
+        result['steps'][4]['detail']=f"{counts['running']} running · {counts['queued']} queued tasks · {counts['agent_requests']} agent requests · {counts['failed']} failed"
+        if counts['agent_requests'] and result['steps'][4]['status']=='idle':result['steps'][4]['status']='queued'
         if children and review['confirmed']:
             awaiting=[c for c in children if c['steps'][2]['status']!='ready']
             ready=sum(c['steps'][3]['status']=='ready' for c in children)
@@ -79,7 +84,7 @@ def progress(store,job,state=None):
             queued_children=[c for c in children if c['mode']=='queued']
             attention=[c for c in children if c['mode'] in ('attention','paused')]
             result['steps'][2].update(status='review' if awaiting else 'ready',detail=f"{len(children)} outputs · {len(awaiting)} scripts await approval")
-            result['steps'][3].update(status='working' if working or queued_children else 'ready' if ready==len(children) else 'review' if any(c['steps'][3]['status']=='review' for c in children) else 'pending',detail=f'{ready}/{len(children)} outputs approved for delivery')
+            result['steps'][3].update(status='working' if working else 'queued' if queued_children else 'ready' if ready==len(children) else 'review' if any(c['steps'][3]['status']=='review' for c in children) else 'pending',detail=f'{ready}/{len(children)} outputs approved for delivery')
             target=(attention or awaiting or [c for c in children if c['steps'][3]['status']!='ready'] or children)[0]
             result['phase']='stories' if awaiting else 'complete' if ready==len(children) else 'cuts'
             result['mode']='attention' if attention else 'working' if working else 'queued' if queued_children else 'ready' if ready==len(children) else 'review'
