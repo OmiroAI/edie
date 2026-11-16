@@ -126,3 +126,14 @@ Selecting this event wakes planning only after the exact reviewed selection matc
 Manual classification is opened by the prominent **Edit labels** button beside
 **Play source** above the selected video's player. Saving labels preserves the
 agent suggestion separately and requires reconfirming the footage selection.
+
+Classification mode freezes the currently filtered/sorted clip queue, presents horizontal
+role/selection/decision toggles beside playback, and advances only after a successful
+Save & next. Previous/Skip do not save; unsaved label drafts are retained per job/source
+in tab memory. Unsaved drafts block footage confirmation. Finishing the queue exits
+review mode without confirming footage or requesting scripts automatically.
+
+Human instructions/feedback and explicit recovery start a new agent intent scope.
+Read/tool reservations are scoped to that intent and the confirmed selection so an
+old successful evidence read does not falsely block a new requested story. Render
+task idempotency remains tied to the revision; this does not authorize duplicate exports.

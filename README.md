@@ -57,7 +57,8 @@ no production deployment has been performed.
 One deployment owns one private editorial context; video jobs are its stories.
 There is no project-creation step.
 
-See [editorial review workspace](docs/editorial-workspace.md),
+See [adaptive visual indexing](docs/adaptive-visual-index.md),
+[editorial review workspace](docs/editorial-workspace.md),
 [implemented runtime workflow and current limits](docs/runtime-workflow.md),
 [private configuration, SOUL and MEMORY](docs/configuration.md),
 [agent contracts for review](docs/agent-contracts.md),
@@ -92,3 +93,5 @@ explicit recovery. Run `python -m edie.worker --state state --media /authorised/
 to process queued renders, or add `--once` for a single task. Completed previews
 are available at the authenticated `/tasks/ID/artifact` route. See the API and
 system documents for recovery limits and remaining production gaps.
+
+See [editorial segments](docs/editorial-segments.md) for source-linked segment classification and review.

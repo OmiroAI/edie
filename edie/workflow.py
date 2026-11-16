@@ -77,6 +77,8 @@ class Workflow:
                 if scope=='script' and current.get('needs_story_options'):raise ValueError('Story options are not ready')
                 if scope=='script' and current.get('footage_review_required',True):
                     if any(c.get('source_id') in review['excluded'] or c.get('source_id') not in review_values for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script contains rejected or out-of-scope footage')
+                    from .segments import allowed
+                    if any(not allowed(self.store,job,review_values[c['source_id']],c['in'],c['out']) for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script overlaps rejected segment')
 
                 field={'script':'script','main':'revision','final':'delivery'}.get(scope)
                 if not field or not current[field] or identity(current[field])!=candidate:raise ValueError('Approval does not match candidate')
@@ -160,6 +162,9 @@ class Workflow:
                 for item in order[order.index(scope):]:current['approvals'].pop(item,None)
                 current['stage']='review_'+scope
             else:raise ValueError('Unknown human event')
+            if kind in ('feedback','recover','human_return','instruction','confirm_footage'):
+                current['run_id']=uuid.uuid4().hex
+                current.pop('last_failure',None)
             current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction','confirm_footage')
             current.pop('job');current.pop('version')
             result={'id':event_id,'job':job,'version':expected+1,'kind':kind,'payload':payload,'received_at':time.time(),'actor':actor}

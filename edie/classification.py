@@ -79,7 +79,9 @@ def classify(store,job,decider):
             cues=evidence['transcript']
             if len(cues)>36:evidence['transcript']=[cues[round(i*(len(cues)-1)/35)] for i in range(36)]
             for cue in evidence['transcript']:cue['text']=cue['text'][:240]
-            keys[key]=identity(dict(profile=1,brief=brief,context=context_text,evidence=evidence,sha256=value['source']['sha256']))
+            if len(evidence['visual'])>24:
+                observations=evidence['visual'];evidence['visual']=[observations[round(i*(len(observations)-1)/23)] for i in range(24)]
+            keys[key]=identity(dict(profile=2,brief=brief,context=context_text,evidence=evidence,sha256=value['source']['sha256']))
             previous=repo.get(job,value['source'])['suggestion']
             if not previous or previous.get('evidence_hash')!=keys[key]:pending.append(evidence)
         for offset in range(0,len(pending),6):
@@ -131,13 +133,21 @@ def review_state(store,job,values=None,repo=None):
     from .editorial import indexes
     if values is None:values=indexes(store,job)
     repo=repo or Classifications(store)
+    from .segments import Segments
+    segments=Segments(store)
+    from .tasks import Tasks
+    Tasks(store.db)
+    segment_mode=any(json.loads(r[0]).get('action')=='segment_index' for r in store.db.execute('SELECT payload FROM tasks WHERE job=?',(job,)).fetchall())
     rows=[];missing=[];excluded=[]
     for key,value in sorted(values.items()):
         entry=value['source'];effective=repo.get(job,entry)['effective']
         if not effective:missing.append(key)
         if effective and 'throw_away' in effective['labels']:excluded.append(key)
         reviewed={k:v for k,v in effective.items() if k in ('labels','reason','score','confidence','moments','star_rank','origin')} if effective else None
-        rows.append(dict(source_id=key,version=entry['version'],sha256=entry['sha256'],classification=reviewed))
+        parts=segments.get(job,entry)['items']
+        if segment_mode and not parts and key not in missing:missing.append(key)
+        if parts and all('throw_away' in p['labels'] for p in parts) and key not in excluded:excluded.append(key)
+        rows.append(dict(source_id=key,version=entry['version'],sha256=entry['sha256'],classification=reviewed,segments=parts))
     return dict(candidate=identity(rows),ready=bool(rows) and not missing,total=len(rows),unclassified=len(missing),excluded=excluded,included=len(rows)-len(excluded))
 
 if __name__=='__main__':main()

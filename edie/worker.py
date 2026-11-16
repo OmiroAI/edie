@@ -45,7 +45,10 @@ def run_once(root, media, action="render", routes=None, classification_socket=No
             store.get(task['job'], 'job')
             command = [sys.executable, '-m', 'edie.editorial', '--state', str(store.root),
                        '--media', str(Path(media).resolve()), '--task', task['id']]
-        elif action == 'index' and routes:
+        elif action == 'segment_index' and classification_socket:
+            store.get(task['job'], 'job')
+            command = [sys.executable, '-m', 'edie.segments', '--state', str(store.root), '--socket', classification_socket, '--task', task['id']]
+        elif action in ('index','visual_index') and routes:
             store.get(task['job'], 'job')
             command = [sys.executable, '-m', 'edie.index_worker', '--state', str(store.root),
                        '--media', str(Path(media).resolve()), '--routes', str(Path(routes).resolve()), '--task', task['id']]

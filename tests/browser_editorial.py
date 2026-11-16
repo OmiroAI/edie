@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory() as temp:
         script=dict(title=title,angle='Does a dedicated camera earn a place next to your phone?',clips=[{**entry,'in':0,'out':2,'purpose':'An unexpected first impression'},{**entry,'in':2,'out':4,'purpose':'The practical takeaway'}],duration=4,missing_footage=[],review_notes=['Verify the model name before export.'])
         Classifications(store).save(job,entry,dict(labels=['a_roll','hook','star'],reason='Specific discovery and practical payoff.',score=90,confidence='medium',moments=[],origin='agent',star_rank=1))
         Classifications(store).save(job,extra,dict(labels=['b_roll'],reason='Short illustrative insert.',score=30,confidence='medium',moments=[],origin='agent'))
+        from edie.segments import Segments
+        Segments(store).save(job,dict(source=entry,duration=4),[dict(id='segment-one',start=0,end=4,title='A complete thought',labels=['a_roll'],score=90,reason='Specific discovery.',origin='agent')],0,False)
         flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy')
     server=Server(('127.0.0.1',0),handler(store.root,'synthetic-browser-token-'*3));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     with sync_playwright() as p:
@@ -36,11 +38,20 @@ with tempfile.TemporaryDirectory() as temp:
         assert page.locator('#jobs button').count()==2
         page.get_by_role('button',name='Play source',exact=True).click();page.locator('video').wait_for();page.wait_for_function('() => document.querySelector("video").readyState>=2')
         page.get_by_label('Search transcript').fill('takeaway');assert page.locator('.cue').count()==1
-        page.get_by_role('button',name='Edit labels',exact=True).click();page.get_by_label('B-roll',exact=True).check();page.get_by_label('A-roll',exact=True).uncheck();page.get_by_label('Classification reason').fill('Use this as illustrative coverage.');page.get_by_role('button',name='Save classification',exact=True).click();page.wait_for_function('() => document.querySelector(".source p").textContent.includes("illustrative coverage")')
+        page.get_by_role('button',name='Edit labels',exact=True).click();page.get_by_role('button',name='B-roll',exact=True).click();page.get_by_role('button',name='A-roll',exact=True).click();page.get_by_label('Classification reason').fill('Use this as illustrative coverage.');page.get_by_role('button',name='Save classification',exact=True).click();page.wait_for_function('() => document.querySelector(".source p").textContent.includes("illustrative coverage")')
         page.get_by_label('Filter classification').select_option('a_roll');assert page.locator('.source').count()==0
         page.get_by_label('Filter classification').select_option('b_roll');assert page.locator('.source').count()==2
         page.get_by_label('Filter classification').select_option('all');page.get_by_label('Sort footage').select_option('longest');assert page.locator('.source strong').first.inner_text()=='demo.mp4';page.get_by_label('Sort footage').select_option('shortest');assert page.locator('.source strong').first.inner_text()=='short.mp4';page.get_by_label('Sort footage').select_option('selects')
+        page.get_by_role('button',name='Classification mode',exact=True).click();assert page.locator('#classification-editor').get_attribute('open') is not None;assert page.locator('input[type=checkbox]').count()==0
+        page.screenshot(path='/output/classification-mode.png',full_page=True)
+        page.get_by_role('button',name='Save & next →',exact=True).click();page.wait_for_function('() => document.querySelector(".classification-detail .section-head h3").textContent==="short.mp4"')
+        page.get_by_role('button',name='Save & next →',exact=True).click();page.get_by_role('button',name='Classification mode',exact=True).wait_for();page.locator('.source').filter(has_text='demo.mp4').click()
         page.screenshot(path='/output/footage.png',full_page=True)
+        page.get_by_role('button',name='Segments',exact=True).click();page.get_by_role('heading',name='Editorial segments').wait_for()
+        page.get_by_role('button',name='Play segment',exact=True).click();page.locator('video').wait_for()
+        page.get_by_role('button',name='Segment B-roll',exact=True).click();page.get_by_label('Segment editorial note').fill('Use as supporting detail.');page.get_by_role('button',name='Save & next segment').click();page.get_by_text('0:00–0:04 · Use as supporting detail.',exact=True).wait_for()
+        page.get_by_text('Adjust boundaries',exact=True).click();page.get_by_label('Segment boundary seconds').fill('2');page.get_by_role('button',name='Split here',exact=True).click();page.wait_for_function('() => document.querySelectorAll(".sources .source").length===2')
+        page.screenshot(path='/output/segments.png',full_page=True)
         page.get_by_role('button',name='Story & script',exact=True).click();assert page.locator('.beat').count()==2
         page.get_by_title('Move later',exact=True).first.click();page.get_by_role('button',name='Save new story order',exact=True).click();page.wait_for_function('() => document.querySelector(".beat h3").textContent==="The practical takeaway"')
         page.wait_for_function('() => document.querySelector(".proposal-select").options.length===2')

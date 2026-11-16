@@ -155,6 +155,19 @@ def handler(root, token):
                     body = json.loads(self.rfile.read(length), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite number')))
                     if not isinstance(body, dict):
                         raise ValueError('Object body required')
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='segment-tasks':
+                        from .editorial import indexes
+                        values=indexes(store,path[1])
+                        if not values:raise ValueError('Index sources first')
+                        identifier=tasks.submit(path[1],'segments-v1-'+identity([v['source'] for v in values.values()]),dict(action='segment_index',sources=[{k:v['source'][k] for k in ('source_id','version','sha256')} for v in values.values()]))
+                        return self.respond(202,dict(id=identifier))
+                    if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='segments':
+                        from .editorial import indexes
+                        from .segments import Segments
+                        from urllib.parse import unquote
+                        index=indexes(store,path[1])[unquote(path[3])]
+                        if body['source_version']!=index['source']['version'] or body['source_sha256']!=index['source']['sha256']:raise ValueError('Source version changed')
+                        return self.respond(200,Segments(store).edit(path[1],index,body))
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='classification':
                         from .editorial import indexes
                         from .classification import Classifications
@@ -174,12 +187,12 @@ def handler(root, token):
                         return self.respond(201, Workflow(store).event(path[1], body['event_id'], body['expected_state_version'], body['type'], body['payload'], body['actor']))
                     if path == ['sources']:
                         return self.respond(201, Catalogue(store).ingest(body['sources'], os.getenv('EDIE_MEDIA','/media')))
-                    if path == ['index-tasks']:
+                    if path in (['index-tasks'],['visual-index-tasks']):
                         store.get(body['job'],'job')
                         if not isinstance(body['sources'],list) or not 1 <= len(body['sources']) <= 500:raise ValueError('Bounded source list required')
                         catalogue=Catalogue(store)
                         for ref in body['sources']:catalogue.get(ref['source_id'],ref['version'])
-                        identifier=tasks.submit(body['job'],self.headers.get('Idempotency-Key',''),{'action':'index','sources':body['sources']})
+                        identifier=tasks.submit(body['job'],self.headers.get('Idempotency-Key',''),{'action':'visual_index' if path==['visual-index-tasks'] else 'index','sources':body['sources']})
                         flow=Workflow(store);state=flow.start(body['job'])
                         pending=list(dict.fromkeys(state.get('pending_index_tasks',[])+[identifier]))
                         flow.update(body['job'],state['version'],{'pending_index_tasks':pending})

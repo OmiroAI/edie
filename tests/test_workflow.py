@@ -41,6 +41,7 @@ class WorkflowTest(unittest.TestCase):
             self.assertTrue(state['script_changes_pending'])
             self.assertTrue(state['requested_run'])
             self.assertEqual(state['supplied_script'],payload['supplied_script'])
+            self.assertTrue(state['run_id'])
             with self.assertRaisesRegex(ValueError,'reconciled script'):
                 flow.event(job,'old-approval',3,'approve',dict(scope='script',candidate=identity(script)))
             self.assertEqual(flow.get(job)['version'],3)
