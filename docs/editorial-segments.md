@@ -9,9 +9,9 @@ or deleted. Human finishing-application acceptance is still outstanding.
 The dashboard exposes Keep / Exclude / Unreviewed. Keep makes a source available;
 it does not require using it. Exclude removes all its segments from planning, without
 deleting anything. Unreviewed blocks selection confirmation in segment workflows.
-Legacy **manual** file labels map to Keep, or Exclude if rejected. Model suggestions
-never count as human review. Previous classification records remain in private
-history, but file role/score controls are replaced by intake decisions.
+Intake requires an explicit decision. Model suggestions never count as human
+review. Obsolete file-role editing/classification and runtime label translations
+have been removed. Operators migrate development records explicitly.
 
 ## Editorial segment proposals
 
@@ -42,7 +42,7 @@ judgements, not probabilities. Story fit is not a permanent score for every futu
 angle. The story agent must explain why chosen beats fit its proposed angle.
 Human selection is separate: Available / Selected / Rejected. Selected prioritises
 a moment without forcing it into every script. Low scores and blooper labels never
-automatically reject footage. Legacy throw-away segment labels map to Rejected.
+automatically reject footage. Selection is required explicitly; reject is not a role.
 
 ## Script references and human authority
 
@@ -52,13 +52,15 @@ use the whole segment. References persist segment bounds in the saved script.
 Rejected overlaps, missing/deleted segment IDs and changed bounds prevent approval
 or construction of an edit. Use multiple beats for multiple segments. Surrounding
 two-second context handles support preview; they are not implicitly included in cuts.
-An old file-only script must be reconciled before approval once segments exist.
+File-only scripts are unsupported; development drafts were cleared for regeneration.
 Existing accepted timelines/masters are retained under the existing authority rules.
 
 Source partitions are keyed by job/source ID/version/hash and have a revision.
 Split gives the two children new IDs. Merge gives a new ID and resets labels and
-scores. Moving a shared boundary updates both neighbours and resets their labels,
-scores and selections for review. These operations retain full source coverage.
+scores. Range editing updates both shared edges atomically and flags affected segments
+for review. Neighbour selections are preserved, including rejects. Shortening the
+first/last segment creates reviewable leading/trailing material. Neighbours cannot
+be consumed by dragging; use merge for that. All operations retain source coverage.
 Human edits protect the entire source partition from automatic regeneration.
 Every save is recorded in `segment_events`; undo UI is not yet implemented.
 
@@ -79,7 +81,7 @@ overwrite file intake or human segment edits.
 - `GET /jobs/{job}/footage`: includes file `disposition` and `segments` records.
 - `POST /jobs/{job}/sources/{source}/segments`: current source version/hash,
   `expected_revision`, `segment_id`, and action: `label` (`labels`, `selection`,
-  `reason`), `split` (`seconds`), `merge_next`, or `boundary` (`seconds`).
+  `reason`), `split` (`seconds`), `merge_next`, or `range` (`start`, `end`).
 - `python -m edie.segments --state /state --media /media --socket /run/edie/codex.sock`.
 
 Tasks use existing leases, cancellation, pause and explicit recovery. Workers have
@@ -95,3 +97,20 @@ blooper availability, stale/source-version writes, human protection, segment scr
 references and rejected-range enforcement. Browser checks cover intake, filtering,
 playback, Blooper/selection controls, save-next and split. Real editorial quality
 still requires review of actual footage.
+
+## Visual range editor
+
+The segment review panel has two draggable handles, exact start/end fields, keyboard
+slider controls, seek-start/end, draft-range playback, neighbour view and zoom-to-range.
+Load filmstrip decodes ten frames from the existing local review proxy in the browser;
+no model call, upload or new permanent media is involved. Frames are drawn to canvas
+under the existing Content Security Policy. Draft boundaries remain local until Save
+segment range. Unsaved drafts block selection confirmation; stale revisions cannot save.
+Changing ranges resets affected roles/scores to Needs review and recomputes context
+handles. Preview timing is proxy-based, not a promise of frame-exact finishing accuracy.
+
+`POST .../segments` action `range` accepts both bounds in one revision-checked write.
+The old one-sided `boundary` action and `/classification` endpoint are removed.
+Index workers no longer trigger whole-file role classification; segment workers own
+editorial roles. Running older worker containers may finish their current jobs before
+being upgraded; indexing caches and live segmentation are not discarded.

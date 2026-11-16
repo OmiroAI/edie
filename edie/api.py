@@ -177,14 +177,6 @@ def handler(root, token):
                         decision=body['disposition']
                         if decision not in ('keep','exclude','unreviewed'):raise ValueError('Unknown file decision')
                         return self.respond(200,Classifications(store).save(path[1],entry,dict(disposition=decision,labels=['throw_away'] if decision=='exclude' else [],reason=body['reason'],origin='human'),body['expected_revision'],True,'dashboard-operator'))
-                    if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='classification':
-                        from .editorial import indexes
-                        from .classification import Classifications
-                        from urllib.parse import unquote
-                        entry=indexes(store,path[1])[unquote(path[3])]['source']
-                        if body['source_version']!=entry['version'] or body['source_sha256']!=entry['sha256']:raise ValueError('Source version changed')
-                        value=None if body.get('reset') is True else dict(labels=body['labels'],reason=body['reason'],origin='human')
-                        return self.respond(200,Classifications(store).save(path[1],entry,value,body['expected_revision'],human=True,actor='dashboard-operator'))
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='proxy':
                         from .editorial import request_proxy
                         from urllib.parse import unquote

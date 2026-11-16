@@ -56,7 +56,7 @@ class WorkflowTest(unittest.TestCase):
                     tool='read_sources';args={'source_ids':['source']}
                 else:
                     self.assertion='visible test' in prompt
-                    tool='propose_stories';proposal=dict(title='A grounded story',angle='A useful demo',clips=[dict(source_id='source',**{'in':0,'out':2},purpose='hook')],missing_footage=[],review_notes=[])
+                    tool='propose_stories';proposal=dict(title='A grounded story',angle='A useful demo',clips=[dict(source_id='source',segment_id='whole',**{'in':0,'out':2},purpose='hook')],missing_footage=[],review_notes=[])
                     args={'proposals':[proposal,{**proposal,'title':'Another story','angle':'A curious observation'}]}
                 return dict(summary='Evidence-based decision',plan=['Review source','Develop story'],action='invoke_tool',tool=tool,arguments=json.dumps(args),question=None),dict(known_cost_micro_usd=0)
         with tempfile.TemporaryDirectory() as d:
@@ -68,7 +68,9 @@ class WorkflowTest(unittest.TestCase):
             (path/'index.json').write_text(json.dumps(dict(source=dict(source_id='source',version='1',sha256='a'*64,path='test.mp4'),duration=3,transcript=[dict(id='s',start=0,end=2,text='visible test')],visual=[],usage=[],media={})))
             from edie.classification import Classifications,review_state
             entry=dict(source_id='source',version='1',sha256='a'*64,path='test.mp4')
-            Classifications(store).save(job,entry,dict(labels=['a_roll'],reason='Verified demo.'),0,True)
+            Classifications(store).save(job,entry,dict(labels=[],disposition='keep',reason='Verified demo.'),0,True)
+            from edie.segments import Segments
+            Segments(store).save(job,dict(source=entry,duration=3),[dict(id='whole',start=0,end=3,labels=['a_roll'],selection='available',score=80,title='Demo',reason='Verified demo')],0,False)
             flow=Workflow(store);flow.start(job)
             flow.event(job,'confirm-fixture',0,'confirm_footage',{'candidate':review_state(store,job)['candidate']})
             decider=Decider();agent=Agent(store,Path(d),decider)

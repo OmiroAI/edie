@@ -52,7 +52,6 @@ def run_once(root, media, action="render", routes=None, classification_socket=No
             store.get(task['job'], 'job')
             command = [sys.executable, '-m', 'edie.index_worker', '--state', str(store.root),
                        '--media', str(Path(media).resolve()), '--routes', str(Path(routes).resolve()), '--task', task['id']]
-            if classification_socket:command+=['--classification-socket',classification_socket]
         else:
             raise ValueError('Unsupported worker capability')
         # No raw FFmpeg output is retained; it may include private source names.

@@ -14,11 +14,11 @@ class SegmentsTest(unittest.TestCase):
             saved=repo.edit('j',index,body);self.assertEqual(len(saved['items']),4)
             with self.assertRaisesRegex(ValueError,'Stale'):repo.edit('j',index,body)
             with self.assertRaisesRegex(ValueError,'preserved'):repo.save('j',index,items,2,human=False)
-            saved=repo.edit('j',index,dict(expected_revision=2,segment_id=saved['items'][0]['id'],action='label',labels=['throw_away'],reason='Accidental lead-in'))
+            saved=repo.edit('j',index,dict(expected_revision=2,segment_id=saved['items'][0]['id'],action='label',labels=[],selection='rejected',reason='Accidental lead-in'))
             self.assertFalse(allowed(store,'j',index,0,2));self.assertFalse(allowed(store,'j',index,3,8));self.assertTrue(allowed(store,'j',index,4,9))
             saved=repo.edit('j',index,dict(expected_revision=3,segment_id=saved['items'][0]['id'],action='merge_next'))
             self.assertEqual(saved['items'][0]['labels'],['needs_review']);self.assertEqual(saved['items'][0]['end'],9)
-            saved=repo.edit('j',index,dict(expected_revision=4,segment_id=saved['items'][0]['id'],action='boundary',seconds=10))
+            saved=repo.edit('j',index,dict(expected_revision=4,segment_id=saved['items'][0]['id'],action='range',start=0,end=10))
             self.assertEqual(saved['items'][1]['start'],10)
             changed={**index['source'],'version':'2'};self.assertEqual(repo.get('j',changed)['items'],[])
             for t in [float('nan'),True,40,-1]:
@@ -42,7 +42,7 @@ class SegmentsTest(unittest.TestCase):
             repo=Segments(store);items=propose(index);repo.save(job,index,items,0,False)
             before=review_state(store,job);self.assertTrue(before['ready'])
             saved=repo.edit(job,index,dict(expected_revision=1,segment_id=items[0]['id'],action='split',seconds=5))
-            saved=repo.edit(job,index,dict(expected_revision=2,segment_id=saved['items'][0]['id'],action='label',labels=['throw_away'],reason='Mistake'))
+            saved=repo.edit(job,index,dict(expected_revision=2,segment_id=saved['items'][0]['id'],action='label',labels=[],selection='rejected',reason='Mistake'))
             self.assertNotEqual(before['candidate'],review_state(store,job)['candidate'])
             agent=Agent(store,None,None);agent.current_job=job
             with self.assertRaisesRegex(ValueError,'rejected segment'):agent.resolve([dict(source_id='s',**{'in':3,'out':6})])
@@ -100,4 +100,20 @@ class SegmentsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'boundary changed'):
                 from edie.segments import reference
                 reference(store,job,index,{**clip,'segment_bounds':[0,9]},True)
+            store.db.close()
+
+    def test_range_edit_atomic_neighbours_and_edge_remainders(self):
+        with tempfile.TemporaryDirectory() as d:
+            store=Store(d);repo=Segments(store)
+            index=dict(source=dict(source_id='s',version='1',sha256='a'*64),duration=20,transcript=[],visual=[])
+            saved=repo.save('j',index,propose(index),0,False);sid=saved['items'][0]['id']
+            saved=repo.edit('j',index,dict(expected_revision=1,segment_id=sid,action='range',start=2,end=18))
+            self.assertEqual([(s['start'],s['end']) for s in saved['items']],[(0,2),(2,18),(18,20)])
+            self.assertEqual(saved['items'][1]['id'],sid)
+            saved=repo.edit('j',index,dict(expected_revision=2,segment_id=sid,action='range',start=1,end=19))
+            self.assertEqual([(s['start'],s['end']) for s in saved['items']],[(0,1),(1,19),(19,20)])
+            for start,end in [(0,19),(1,20),(10,9),(float('nan'),19),(True,19)]:
+                with self.assertRaises(ValueError):repo.edit('j',index,dict(expected_revision=3,segment_id=sid,action='range',start=start,end=end))
+                self.assertEqual(repo.get('j',index['source'])['revision'],3)
+            with self.assertRaises(ValueError):repo.edit('j',index,dict(expected_revision=2,segment_id=sid,action='range',start=2,end=18))
             store.db.close()

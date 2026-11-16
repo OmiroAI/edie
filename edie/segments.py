@@ -4,7 +4,7 @@ import json
 import math
 import uuid
 from .workflow import identity
-from .classification import LABELS
+from .segment_planner import ROLE_LABELS as LABELS
 
 
 def propose(index):
@@ -21,7 +21,7 @@ def propose(index):
     cuts.append(float(duration))
     return [dict(id=identity([index['source']['source_id'],index['source']['version'],a,b])[:24],start=a,end=b,
                  title=' '.join(c['text'] for c in speech if c['start']<b and c['end']>a)[:120] or 'Visual sequence',
-                 labels=['needs_review'],score=0,reason='Suggested boundary; review the complete thought or action.',origin='boundary_proposal')
+                 labels=['needs_review'],selection='available',score=0,story_fit=0,reason='Suggested boundary; review the complete thought or action.',origin='boundary_proposal')
             for a,b in zip(cuts,cuts[1:])]
 
 
@@ -45,7 +45,7 @@ class Segments:
             a,b=item['start'],item['end']
             if any(isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) for t in (a,b)) or not 0<=a<b<=index['duration'] or abs(a-last)>0.001:raise ValueError('Segments must partition the source without gaps or overlaps')
             if not isinstance(item['id'],str) or not item['id'] or item['id'] in ids:raise ValueError('Unique segment IDs required')
-            if not isinstance(item['labels'],list) or len(set(item['labels']))!=len(item['labels']) or any(x not in LABELS for x in item['labels']) or {'star','throw_away'}<=set(item['labels']):raise ValueError('Invalid segment labels')
+            if not isinstance(item['labels'],list) or len(set(item['labels']))!=len(item['labels']) or any(x not in LABELS for x in item['labels']):raise ValueError('Invalid segment labels')
             if selection(item) not in ('available','selected','rejected'):raise ValueError('Invalid segment selection')
             if 'story_fit' in item and (isinstance(item['story_fit'],bool) or not isinstance(item['story_fit'],int) or not 0<=item['story_fit']<=100):raise ValueError('Invalid brief fit score')
             if not isinstance(item['score'],int) or isinstance(item['score'],bool) or not 0<=item['score']<=100:raise ValueError('Invalid segment score')
@@ -69,8 +69,7 @@ class Segments:
         if n is None:raise ValueError('Unknown segment')
         item=items[n];action=body['action']
         if action=='label':
-            item.update(labels=body['labels'],reason=body['reason'],origin='human',selection=body.get('selection',selection(item)))
-            if 'throw_away' in body['labels']:item['selection']='rejected'
+            item.update(labels=body['labels'],reason=body['reason'],origin='human',selection=body['selection'])
         elif action=='split':
             t=body['seconds']
             if isinstance(t,bool) or not isinstance(t,(int,float)) or not item['start']<t<item['end']:raise ValueError('Split must be inside segment')
@@ -80,23 +79,39 @@ class Segments:
             if n+1==len(items):raise ValueError('No adjacent segment')
             other=items[n+1]
             items[n:n+2]=[{**item,'id':uuid.uuid4().hex,'end':other['end'],'labels':['needs_review'],'selection':'available','score':0,'story_fit':0,'reason':'Merged by editor; review labels.','origin':'human'}]
-        elif action=='boundary':
-            if n+1==len(items):raise ValueError('No following boundary')
-            t=body['seconds']
-            if isinstance(t,bool) or not isinstance(t,(int,float)) or not item['start']<t<items[n+1]['end']:raise ValueError('Invalid boundary')
-            item['end']=t;items[n+1]['start']=t
-            for s in (item,items[n+1]):s.update(labels=['needs_review'],selection='available',score=0,story_fit=0,reason='Boundary adjusted; review labels.',origin='human')
+        elif action=='range':
+            start,end=body['start'],body['end']
+            if any(isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) for t in (start,end)):raise ValueError('Finite range required')
+            low=items[n-1]['start'] if n else 0
+            high=items[n+1]['end'] if n+1<len(items) else index['duration']
+            if not low<=start<end<=high or (n and start<=low) or (n+1<len(items) and end>=high):raise ValueError('Range must leave adjacent segments intact; merge to consume them')
+            if start==item['start'] and end==item['end']:return current
+            touched=[]
+            if start!=item['start']:
+                if n:items[n-1]['end']=start;touched.append(items[n-1])
+                elif start>0:
+                    items.insert(0,dict(item,id=uuid.uuid4().hex,start=0,end=start,title='Leading material',selection='available'));n+=1;touched.append(items[0])
+            if end!=item['end']:
+                if n+1<len(items):items[n+1]['start']=end;touched.append(items[n+1])
+                elif end<index['duration']:
+                    items.append(dict(item,id=uuid.uuid4().hex,start=end,end=index['duration'],title='Trailing material',selection='available'));touched.append(items[-1])
+            item.update(start=start,end=end)
+            for part in [item,*touched]:
+                part.update(labels=['needs_review'],score=0,story_fit=0,origin='human',reason='Range adjusted; review this beat.',
+                            context_start=max(0,part['start']-2),context_end=min(index['duration'],part['end']+2))
         else:raise ValueError('Unknown segment action')
         return self.save(job,index,items,body['expected_revision'])
 
 
 def selection(item):
-    return item.get('selection') or ('rejected' if 'throw_away' in item['labels'] else 'available')
+    return item['selection']
 
 
 def reference(store,job,index,clip,require=False):
     items=Segments(store).get(job,index['source'])['items']
-    if not items:return None
+    if not items:
+        if require:raise ValueError('Segments required before scripting')
+        return None
     part=next((s for s in items if s['id']==clip.get('segment_id')),None)
     if part is None:
         if require or clip.get('segment_id'):raise ValueError('Current segment reference required')

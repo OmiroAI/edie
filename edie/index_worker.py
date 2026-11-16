@@ -11,7 +11,7 @@ from .worker import run_once
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--state',required=True);p.add_argument('--media',required=True);p.add_argument('--routes',required=True);p.add_argument('--classification-socket');p.add_argument('--task');p.add_argument('--once',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--state',required=True);p.add_argument('--media',required=True);p.add_argument('--routes',required=True);p.add_argument('--task');p.add_argument('--once',action='store_true');a=p.parse_args()
     if a.task:
         import os
         store=Store(a.state);task=Tasks(store.db).get(a.task)
@@ -31,14 +31,9 @@ def main():
                 result=upgrade(store,prior,a.media,routes['vision'])
             else:result=analyse(store,entry,a.media,routes)
             results.append(dict(source_id=entry['source_id'],version=entry['version'],sha256=entry['sha256'],segments=len(result['transcript']),visual_samples=sum(len(v['sampled_times']) for v in result['visual'])))
-        classification=None
-        if a.classification_socket:
-            from .classification import classify
-            from .codex import CodexSocket
-            classification=classify(store,task['job'],CodexSocket(a.classification_socket))
-        print(json.dumps(dict(kind='footage_index',sources=results,classification=classification)));store.db.close();return
+        print(json.dumps(dict(kind='footage_index',sources=results)));store.db.close();return
     while True:
-        worked=run_once(a.state,a.media,'visual_index',a.routes,a.classification_socket) or run_once(a.state,a.media,'index',a.routes,a.classification_socket)
+        worked=run_once(a.state,a.media,'visual_index',a.routes) or run_once(a.state,a.media,'index',a.routes)
         if a.once:return
         if not worked:time.sleep(2)
 

@@ -65,80 +65,29 @@ same task controls as renders. The UI currently polls every ten seconds and show
 state transitions, not a fabricated completion percentage or token stream.
 
 
-## Editorial classification
+## Intake, segment review and story gate
 
-Classification is a job-scoped second pass after reusable transcript/visual indexing.
-It uses explicitly authorised text-only subscription Codex; no media leaves the local
-inference setup. The queue index worker accepts `--classification-socket` and Compose
-wires it to the broker. Standalone raw `edie.analysis` indexing has no story/job context;
-run `python -m edie.classification --state ... --config ... --job ... --socket ...`
-after it. This command also classifies previously indexed jobs without retranscription.
+Files have explicit Keep / Exclude / Unreviewed decisions. Editorial roles, Blooper,
+intrinsic usefulness and brief-fit scores belong to source-linked segments. Human
+Available / Selected / Rejected decisions are separate from roles. Whole-file role
+classification, its editing endpoint and runtime legacy-label translations have been
+removed; development records are migrated explicitly by the operator.
 
-Overlapping roles: A-roll, B-roll, hook, demonstration, reaction, establishing and
-needs-review. Reject candidate (`throw_away`) is an editorial flag, never deletion.
-Sparse observations, absent speech and poor ASR do not establish unusable footage.
-Exact byte duplicates are hash-checked; near-duplicates are not automatically proven.
-Each model suggestion contains a reason, confidence, job-usefulness score and up to
-three source-timed moments. Up to five non-rejected sources receive automatic star
-ranks across the whole job. Scores rank suggestions, not objective footage quality.
-Long transcripts are sampled across their duration; whole-video certainty is not claimed.
+The Segments panel supports source-range playback, context handles, role toggles,
+selection, ranking/filtering, save-next, split and merge. Its visual range editor
+provides draggable start/end handles, precise fields, neighbour view, zoom, seek and
+draft preview. Filmstrip frames are decoded in-browser from the local proxy, with no
+model request. Saving both bounds is atomic and revision-checked. Adjacent ranges
+adjust; first/last trims retain reviewable remainder segments. Unsaved drafts block
+footage confirmation. Source playback is for review, not frame-accurate finishing.
 
-Suggestions are cached by source evidence, source hash, job brief, private context
-and classifier profile. Changed evidence is reclassified; renames preserve human labels.
-Human overrides are stored separately and win over reruns. Resetting to agent labels
-is explicit, and both suggestions and edits have an append-only audit history.
-Classification keys include job/source ID/version/hash; changed media cannot inherit
-an old approval-like human decision. Stars can be added/removed by humans; the five-star
-limit applies to the automatic shortlist, not to an operator's personal selects.
-The agent receives effective labels in its planning context. Labels do not approve or
-rewrite a script or automatically cut anything from an accepted edit.
+All files require intake and every kept source needs segments before confirming the
+exact selection. Excluded sources and rejected segments cannot enter scripts. New
+scripts reference segment IDs, bounds and trims; changed segment boundaries require
+fresh review. Confirmation allows story proposals, not script or render approval.
+The user approves a chosen script before Edie builds a cut. See the complete storage,
+API and reasoning design in [editorial segments](editorial-segments.md).
 
-GET job footage includes suggestion, override, effective classification and revision.
-POST `/jobs/ID/sources/SOURCE/classification` requires source_version, source_sha256,
-expected_revision, labels and a reason; `reset:true` restores the suggestion. Stale
-versions and conflicting reject/star combinations fail. The browser supports label
-filters and sorting by stars/usefulness, filename, duration or current script order.
-
-
-### Mandatory footage review before story development
-
-The workflow is indexing/classification → human footage confirmation → 2–3 story
-options → script selection/refinement/approval → rough cut → cut review/delivery.
-All indexed sources must have an effective classification (human labels can fill in
-missing suggestions), and at least one must be included. The `confirm_footage` event
-binds the confirmation to a digest of current source versions/hashes and visible
-classification decisions. Changed classifications or sources invalidate confirmation.
-Workers and approval endpoints enforce this gate. Existing unapproved drafts remain
-stored but do not bypass it. No actual human confirmation is synthesized during migration.
-
-Confirmed reject candidates are excluded from agent source summaries, evidence reads
-and clip resolution. To reinclude a reject, the human must change its labels and
-reconfirm. `propose_stories` returns two or three distinct source-linked proposals;
-these still require script selection/approval. A confirmation never approves a render.
-Human-authored/accepted timeline revisions remain protected; classification review
-does not automatically replace an already accepted edit.
-
-GET workflow includes `footage_review` counts, excluded IDs, candidate digest, readiness
-and confirmation status. POST job events accepts `type:confirm_footage` with
-`payload:{candidate:...}` plus the existing event ID, state version and actor fields.
-Selecting this event wakes planning only after the exact reviewed selection matches.
-
-Manual classification is opened by the prominent **Edit labels** button beside
-**Play source** above the selected video's player. Saving labels preserves the
-agent suggestion separately and requires reconfirming the footage selection.
-
-Classification mode freezes the currently filtered/sorted clip queue, presents horizontal
-role/selection/decision toggles beside playback, and advances only after a successful
-Save & next. Previous/Skip do not save; unsaved label drafts are retained per job/source
-in tab memory. Unsaved drafts block footage confirmation. Finishing the queue exits
-review mode without confirming footage or requesting scripts automatically.
-
-Human instructions/feedback and explicit recovery start a new agent intent scope.
-Read/tool reservations are scoped to that intent and the confirmed selection so an
-old successful evidence read does not falsely block a new requested story. Render
-task idempotency remains tied to the revision; this does not authorize duplicate exports.
-
-The current UI supersedes source-level role classification with file intake
-(Keep / Exclude / Unreviewed). Roles, Blooper, usefulness and brief-fit ranking now
-belong to Segments, alongside separate Available / Selected / Rejected decisions.
-Scripts reference segment IDs and trims; see [editorial segments](editorial-segments.md).
+Indexing/segmentation counts appear independently of the editorial stage. Running
+analysis need not change a job's story stage. The dashboard polls counts without
+replacing unsaved forms or interrupting playback; refresh loads newly prepared rows.

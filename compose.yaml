@@ -67,7 +67,7 @@ services:
   index-worker:
     <<: *runtime
     profiles: [agent]
-    entrypoint: [python, -m, edie.index_worker, --state, /state, --media, /media, --routes, /config/routes.json, --classification-socket, /run/codex.sock]
+    entrypoint: [python, -m, edie.index_worker, --state, /state, --media, /media, --routes, /config/routes.json]
     environment:
       EDIE_CONFIG_DIR: /config
     network_mode: none
