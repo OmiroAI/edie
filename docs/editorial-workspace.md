@@ -137,3 +137,8 @@ Human instructions/feedback and explicit recovery start a new agent intent scope
 Read/tool reservations are scoped to that intent and the confirmed selection so an
 old successful evidence read does not falsely block a new requested story. Render
 task idempotency remains tied to the revision; this does not authorize duplicate exports.
+
+The current UI supersedes source-level role classification with file intake
+(Keep / Exclude / Unreviewed). Roles, Blooper, usefulness and brief-fit ranking now
+belong to Segments, alongside separate Available / Selected / Rejected decisions.
+Scripts reference segment IDs and trims; see [editorial segments](editorial-segments.md).

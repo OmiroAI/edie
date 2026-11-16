@@ -4,7 +4,8 @@ A self-hostable video-editor assistant under development. Reusable code is publi
 configuration, editorial context, footage and outputs stay private.
 
 The runtime now includes a bounded Codex decision loop, local speech/visual indexing,
-versioned SOUL/MEMORY context, source-linked scripts and human approval gates,
+versioned SOUL/MEMORY context, file intake, brief-aware segment proposals and
+classification (including bloopers), segment-linked scripts and human approval gates,
 OTIO timelines with B-roll over dialogue, FFmpeg previews, timed subtitle sidecars,
 XML handoff packages, a bearer-authenticated API and review dashboard.
 

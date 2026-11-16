@@ -77,8 +77,9 @@ class Workflow:
                 if scope=='script' and current.get('needs_story_options'):raise ValueError('Story options are not ready')
                 if scope=='script' and current.get('footage_review_required',True):
                     if any(c.get('source_id') in review['excluded'] or c.get('source_id') not in review_values for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script contains rejected or out-of-scope footage')
-                    from .segments import allowed
+                    from .segments import allowed,reference
                     if any(not allowed(self.store,job,review_values[c['source_id']],c['in'],c['out']) for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script overlaps rejected segment')
+                    for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[]):reference(self.store,job,review_values[c['source_id']],c,require=True)
 
                 field={'script':'script','main':'revision','final':'delivery'}.get(scope)
                 if not field or not current[field] or identity(current[field])!=candidate:raise ValueError('Approval does not match candidate')

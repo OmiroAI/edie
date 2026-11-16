@@ -18,7 +18,7 @@ def indexes(store, job):
 
 def footage(store, job):
     values = indexes(store, job)
-    from .classification import Classifications
+    from .classification import Classifications,file_decision
     classifications=Classifications(store)
     from .segments import Segments
     segments=Segments(store)
@@ -33,7 +33,7 @@ def footage(store, job):
         entry = value['source']
         task = next((t for t in proxy_tasks if t['payload'].get('action') == 'review_proxy' and t['payload'].get('sha256') == entry['sha256']), None)
         rows.append(dict(source_id=key, path=entry['path'], version=entry['version'], sha256=entry['sha256'],
-                         duration=value['duration'], transcript=value['transcript'], visual=value['visual'], classification=classifications.get(job,entry),
+                         disposition=file_decision(classifications.get(job,entry)), duration=value['duration'], transcript=value['transcript'], visual=value['visual'], classification=classifications.get(job,entry),
                          segments=segments.get(job,entry), coverage=value.get('coverage'), visual_progress=progress.get(key), cut_candidates=value.get('cut_candidates',[]), timing_issues=len(value.get('transcript_issues', [])),
                          summary=' '.join(v['observations'] for v in value['visual'])[:800],
                          proxy_task=task['id'] if task else None, proxy_state=task['state'] if task else 'not_requested'))

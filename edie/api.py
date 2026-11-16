@@ -159,7 +159,7 @@ def handler(root, token):
                         from .editorial import indexes
                         values=indexes(store,path[1])
                         if not values:raise ValueError('Index sources first')
-                        identifier=tasks.submit(path[1],'segments-v1-'+identity([v['source'] for v in values.values()]),dict(action='segment_index',sources=[{k:v['source'][k] for k in ('source_id','version','sha256')} for v in values.values()]))
+                        identifier=tasks.submit(path[1],'segments-v2-'+identity([v['source'] for v in values.values()]),dict(action='segment_index',profile=2,sources=[{k:v['source'][k] for k in ('source_id','version','sha256')} for v in values.values()]))
                         return self.respond(202,dict(id=identifier))
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='segments':
                         from .editorial import indexes
@@ -168,6 +168,15 @@ def handler(root, token):
                         index=indexes(store,path[1])[unquote(path[3])]
                         if body['source_version']!=index['source']['version'] or body['source_sha256']!=index['source']['sha256']:raise ValueError('Source version changed')
                         return self.respond(200,Segments(store).edit(path[1],index,body))
+                    if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='disposition':
+                        from .editorial import indexes
+                        from .classification import Classifications
+                        from urllib.parse import unquote
+                        entry=indexes(store,path[1])[unquote(path[3])]['source']
+                        if body['source_version']!=entry['version'] or body['source_sha256']!=entry['sha256']:raise ValueError('Source version changed')
+                        decision=body['disposition']
+                        if decision not in ('keep','exclude','unreviewed'):raise ValueError('Unknown file decision')
+                        return self.respond(200,Classifications(store).save(path[1],entry,dict(disposition=decision,labels=['throw_away'] if decision=='exclude' else [],reason=body['reason'],origin='human'),body['expected_revision'],True,'dashboard-operator'))
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='classification':
                         from .editorial import indexes
                         from .classification import Classifications

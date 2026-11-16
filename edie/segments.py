@@ -46,6 +46,8 @@ class Segments:
             if any(isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) for t in (a,b)) or not 0<=a<b<=index['duration'] or abs(a-last)>0.001:raise ValueError('Segments must partition the source without gaps or overlaps')
             if not isinstance(item['id'],str) or not item['id'] or item['id'] in ids:raise ValueError('Unique segment IDs required')
             if not isinstance(item['labels'],list) or len(set(item['labels']))!=len(item['labels']) or any(x not in LABELS for x in item['labels']) or {'star','throw_away'}<=set(item['labels']):raise ValueError('Invalid segment labels')
+            if selection(item) not in ('available','selected','rejected'):raise ValueError('Invalid segment selection')
+            if 'story_fit' in item and (isinstance(item['story_fit'],bool) or not isinstance(item['story_fit'],int) or not 0<=item['story_fit']<=100):raise ValueError('Invalid brief fit score')
             if not isinstance(item['score'],int) or isinstance(item['score'],bool) or not 0<=item['score']<=100:raise ValueError('Invalid segment score')
             if any(not isinstance(item[k],str) or not item[k].strip() or len(item[k])>4000 for k in ('reason','title')):raise ValueError('Segment title and reason required')
             ids.add(item['id']);last=b
@@ -67,7 +69,8 @@ class Segments:
         if n is None:raise ValueError('Unknown segment')
         item=items[n];action=body['action']
         if action=='label':
-            item.update(labels=body['labels'],reason=body['reason'],origin='human')
+            item.update(labels=body['labels'],reason=body['reason'],origin='human',selection=body.get('selection',selection(item)))
+            if 'throw_away' in body['labels']:item['selection']='rejected'
         elif action=='split':
             t=body['seconds']
             if isinstance(t,bool) or not isinstance(t,(int,float)) or not item['start']<t<item['end']:raise ValueError('Split must be inside segment')
@@ -76,50 +79,54 @@ class Segments:
         elif action=='merge_next':
             if n+1==len(items):raise ValueError('No adjacent segment')
             other=items[n+1]
-            items[n:n+2]=[{**item,'id':uuid.uuid4().hex,'end':other['end'],'labels':['needs_review'],'score':0,'reason':'Merged by editor; review labels.','origin':'human'}]
+            items[n:n+2]=[{**item,'id':uuid.uuid4().hex,'end':other['end'],'labels':['needs_review'],'selection':'available','score':0,'story_fit':0,'reason':'Merged by editor; review labels.','origin':'human'}]
         elif action=='boundary':
             if n+1==len(items):raise ValueError('No following boundary')
             t=body['seconds']
             if isinstance(t,bool) or not isinstance(t,(int,float)) or not item['start']<t<items[n+1]['end']:raise ValueError('Invalid boundary')
             item['end']=t;items[n+1]['start']=t
-            for s in (item,items[n+1]):s.update(labels=['needs_review'],reason='Boundary adjusted; review labels.',origin='human')
+            for s in (item,items[n+1]):s.update(labels=['needs_review'],selection='available',score=0,story_fit=0,reason='Boundary adjusted; review labels.',origin='human')
         else:raise ValueError('Unknown segment action')
         return self.save(job,index,items,body['expected_revision'])
 
 
+def selection(item):
+    return item.get('selection') or ('rejected' if 'throw_away' in item['labels'] else 'available')
+
+
+def reference(store,job,index,clip,require=False):
+    items=Segments(store).get(job,index['source'])['items']
+    if not items:return None
+    part=next((s for s in items if s['id']==clip.get('segment_id')),None)
+    if part is None:
+        if require or clip.get('segment_id'):raise ValueError('Current segment reference required')
+        return None
+    if not part['start']<=clip['in']<clip['out']<=part['end']:raise ValueError('Trim outside referenced segment')
+    if clip.get('segment_bounds') is not None and clip['segment_bounds']!=[part['start'],part['end']]:raise ValueError('Segment boundary changed; reconcile script')
+    return dict(segment_id=part['id'],segment_bounds=[part['start'],part['end']])
+
+
 def allowed(store,job,index,begin,end):
     items=Segments(store).get(job,index['source'])['items']
-    return not any('throw_away' in s['labels'] and s['start']<end and s['end']>begin for s in items)
+    return not any(selection(s)=='rejected' and s['start']<end and s['end']>begin for s in items)
 
 
 def generate(store,job,decider):
     from .editorial import indexes
-    from .classification import PROMPT,SCHEMA
-    from .usage import record
-    from jsonschema import validate
+    from .segment_planner import plan
+    from .classification import Classifications,file_decision
     repo=Segments(store);count=0
     for index in indexes(store,job).values():
         old=repo.get(job,index['source'])
-        if old['items']:continue  # Restart safe; never replace a reviewed source partition.
-        items=propose(index)
-        for offset in range(0,len(items),4):
-            batch=items[offset:offset+4];sources=[]
-            for s in batch:
-                cues=[c for c in index['transcript'] if c['start']<s['end'] and c['end']>s['start']]
-                visual=[v for v in index['visual'] if any(s['start']<=t<s['end'] for t in v.get('sampled_times',[]))]
-                sources.append(dict(source_id=s['id'],start=s['start'],end=s['end'],transcript=[{k:c[k] for k in ('start','end','text')} for c in cues][:60],visual=visual[:24]))
-            context=store.job_context(job) if store.context and store.get(job,'job').get('context') else {}
-            prompt=PROMPT+'\nEach source here is one editorial segment. Judge only its supplied time range. Do not invent finer boundaries.\n'+json.dumps(dict(brief=store.get(job,'job')['brief'],private_style_context=str(context)[:14000],sources=sources))
-            result,usage=decider.decide(prompt,SCHEMA);record(store.root/'usage.jsonl',dict(stage='segment_classification',job=job,**usage));validate(result,SCHEMA)
-            if sorted(c['source_id'] for c in result['clips'])!=sorted(s['id'] for s in batch):raise ValueError('Segment response mismatch')
-            by_id={c['source_id']:c for c in result['clips']}
-            for s in batch:
-                c=by_id[s['id']];s.update(labels=c['labels'],score=c['score'],reason=c['reason'],origin='agent')
+        if old['human'] or (old['items'] and all(s.get('profile')==2 for s in old['items'])):continue
+        if file_decision(Classifications(store).get(job,index['source']))=='exclude':continue
+        context=store.job_context(job) if store.context and store.get(job,'job').get('context') else {}
+        items=plan(index,store.get(job,'job')['brief'],context,decider,store.root/'segment-decisions',store.root/'usage.jsonl')
         try:repo.save(job,index,items,old['revision'],human=False)
         except ValueError:
             if not repo.get(job,index['source'])['human']:raise
         count+=len(items)
-    return dict(kind='segment_index',new_segments=count)
+    return dict(kind='segment_index',profile=2,new_segments=count)
 
 
 def main():

@@ -1,63 +1,97 @@
-# Editorial segments
+# Files, segments and scripts
 
-Implemented: job-scoped, versioned source ranges with labels, usefulness scores and
-human split/merge/boundary controls. Originals are never split into physical files.
-These are default editorial units, not indivisible restrictions on final trims.
+Implemented in the editorial runtime. Files are intake units; segments are reusable
+story beats; scripts select and order segment trims. Original files are never split
+or deleted. Human finishing-application acceptance is still outstanding.
 
-The initial boundary proposal uses valid transcript pauses, sentence endings and
-visual scene-change candidates. It avoids cutting through a valid ASR utterance,
-requires six seconds since the preceding proposed boundary and leaves at least
-three seconds at the end. These are conservative heuristics, not semantic detection
-or frame-accurate alignment. Long continuous speech/action may remain one segment;
-the editor can split it. Silent footage uses scene evidence where available.
+## File intake
 
-A configured text-only Codex route assesses each segment against the job brief and
-private style context. It receives overlapping transcript/visual observations and
-returns labels, a 0–100 usefulness score and a reason. Scores sort across the job;
-they are not probabilities. File-level labels remain separate. A rejected file
-excludes all its segments. A rejected segment prevents overlapping source trims
-in new agent scripts and script approval. Existing accepted edits remain stored.
+The dashboard exposes Keep / Exclude / Unreviewed. Keep makes a source available;
+it does not require using it. Exclude removes all its segments from planning, without
+deleting anything. Unreviewed blocks selection confirmation in segment workflows.
+Legacy **manual** file labels map to Keep, or Exclude if rejected. Model suggestions
+never count as human review. Previous classification records remain in private
+history, but file role/score controls are replaced by intake decisions.
 
-## Storage and review
+## Editorial segment proposals
 
-`segments` stores a revisioned partition per job/source ID/version/hash, with stable
-segment IDs and source-relative start/end seconds. `segment_events` retains every
-saved version. Save requires the exact revision and current source version/hash.
-Split creates two new IDs. Merge creates a new ID and resets labels to needs-review.
-Moving a shared boundary updates both neighbours and flags their labels for review.
-All ranges must be finite, nonoverlapping and cover the entire source. A reject is
-an exclusion label, never a gap or media deletion. Human edits protect the entire
-source partition from automatic replacement. No generated pass resets human labels.
+A text-only Codex reasoning pass receives the job brief, deployment private context,
+transcript, visual observations, candidate pauses/scenes and neighbouring evidence.
+It chooses coherent thoughts, exchanges, reactions, demonstrations or visual actions
+and explains each boundary. A whole video can be one segment. Unboxing favours
+reveal/action plus reaction; brain dumps favour complete thoughts/exchanges; event
+coverage favours discoveries; B-roll favours continuous usable visual actions.
+The brief/context can specify granularity. There is no fixed segment length.
 
-The exact segment partition and labels participate in footage-confirmation hashing.
-When a segment task exists, all current indexed sources must have segment records
-before confirmation. Changed boundaries/labels invalidate the previous selection.
-The user confirms in Footage after reviewing Segments; preparation never approves
-footage, scripts or renders. Story selection must be reconfirmed after changes.
+For bounded requests, long sources are divided at candidate safe boundaries after
+approximately three minutes, with ten seconds of neighbouring evidence. Boundaries
+between requests remain fixed: cross-window semantic merging is a human operation.
+An uninterrupted range may be longer. At most 100 transcript cues and 40 observations
+are sampled evenly throughout a request, with omission counts disclosed. The planner
+rejects malformed partitions and cuts inside valid ASR utterances. These checks do
+not guarantee semantic completeness or frame/word-accurate alignment.
 
-## API and workers
+Roles overlap: A-roll, B-roll, Hook, Demonstration, Reaction, Establishing, Blooper,
+Star and Needs review. **Blooper is not rejection**: it denotes an evidenced slip,
+failed take, interruption, mishap or funny unexpected reaction. Preserve its setup
+and payoff. Do not manufacture humour or infer unseen failures.
 
-- `POST /jobs/{job}/segment-tasks`, body `{}`: idempotently queue preparation for
-  the current source collection. The task waits for active source indexing. The
-  worker uses the existing task lease, cancellation, pause and explicit recovery.
-- `GET /jobs/{job}/footage`: each source includes `segments` with revision, human
-  protection flag and items. Dashboard Segments sorts by usefulness, source order
-  or duration and filters labels. Playback uses the existing source proxy.
-- `POST /jobs/{job}/sources/{source}/segments`: body includes `source_version`,
-  `source_sha256`, `expected_revision`, `segment_id` and `action`. Actions:
-  `label` (`labels`, `reason`), `split` (`seconds`), `merge_next`, `boundary`
-  (`seconds`, moves the selected segment's end and next segment's start).
-- Worker: `python -m edie.segments --state /state --media /media --socket /run/edie/codex.sock`.
-  Runtime needs only existing private state/media mounts and permitted text broker.
-  No storage credentials or network access are required.
+Each segment has an intrinsic usefulness `score`, separate `story_fit` (fit to the
+current job brief), a reason and a boundary explanation. Scores are 0–100 editorial
+judgements, not probabilities. Story fit is not a permanent score for every future
+angle. The story agent must explain why chosen beats fit its proposed angle.
+Human selection is separate: Available / Selected / Rejected. Selected prioritises
+a moment without forcing it into every script. Low scores and blooper labels never
+automatically reject footage. Legacy throw-away segment labels map to Rejected.
 
-Completed sources checkpoint independently. Restart skips existing partitions;
-failed in-progress source assessments may need replay and associated usage must be
-reported. Source replacement creates a new partition; old review records remain.
-Suggestion regeneration over an existing human partition and segment-level undo UI
-are not implemented. Audit history is retained for operator recovery.
+## Script references and human authority
 
-Automated checks cover boundary generation, invalid ranges, stale writes, source
-version isolation, human protection and rejected-range exclusion. Browser checks
-exercise segment playback, labels, save/next and splitting with synthetic footage.
-Real-footage editorial quality still requires human review.
+New clips and overlays reference `source_id`, `segment_id`, source-relative `in` /
+`out`, and purpose. Trims must fit inside the referenced segment; a script need not
+use the whole segment. References persist segment bounds in the saved script.
+Rejected overlaps, missing/deleted segment IDs and changed bounds prevent approval
+or construction of an edit. Use multiple beats for multiple segments. Surrounding
+two-second context handles support preview; they are not implicitly included in cuts.
+An old file-only script must be reconciled before approval once segments exist.
+Existing accepted timelines/masters are retained under the existing authority rules.
+
+Source partitions are keyed by job/source ID/version/hash and have a revision.
+Split gives the two children new IDs. Merge gives a new ID and resets labels and
+scores. Moving a shared boundary updates both neighbours and resets their labels,
+scores and selections for review. These operations retain full source coverage.
+Human edits protect the entire source partition from automatic regeneration.
+Every save is recorded in `segment_events`; undo UI is not yet implemented.
+
+Exact segment records and file decisions participate in footage confirmation.
+All kept current sources need segments and all files need intake decisions. Changes
+invalidate confirmation; preparation never approves footage, scripts or renders.
+Workflow: review file intake → review segments → confirm selection → choose story
+and review its trims → approve script → render. Refreshing model suggestions cannot
+overwrite file intake or human segment edits.
+
+## API and operations
+
+- `POST /jobs/{job}/sources/{source}/disposition`: current source version/hash,
+  `expected_revision` (classification revision), `disposition`, and `reason`.
+- `POST /jobs/{job}/segment-tasks`, `{}`: idempotently queues profile-2 preparation
+  for the current source collection. Existing human partitions are retained; old
+  machine-only profile-1 partitions are upgraded. Waits for source indexing.
+- `GET /jobs/{job}/footage`: includes file `disposition` and `segments` records.
+- `POST /jobs/{job}/sources/{source}/segments`: current source version/hash,
+  `expected_revision`, `segment_id`, and action: `label` (`labels`, `selection`,
+  `reason`), `split` (`seconds`), `merge_next`, or `boundary` (`seconds`).
+- `python -m edie.segments --state /state --media /media --socket /run/edie/codex.sock`.
+
+Tasks use existing leases, cancellation, pause and explicit recovery. Workers have
+private state, read-only media and a permitted text broker socket, no network or
+storage credentials. Valid model responses are cached by evidence/context/schema;
+completed source partitions checkpoint independently. Interrupted uncached calls
+can have unknown usage; never assume retries are free. Usage is recorded locally.
+There is no paid fallback. Model-route budgets and subscription accounting retain
+the limitations documented in runtime workflow docs.
+
+Checks cover valid partitions, mid-speech rejection, cache reuse, separate scores,
+blooper availability, stale/source-version writes, human protection, segment script
+references and rejected-range enforcement. Browser checks cover intake, filtering,
+playback, Blooper/selection controls, save-next and split. Real editorial quality
+still requires review of actual footage.
