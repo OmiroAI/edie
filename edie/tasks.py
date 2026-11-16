@@ -34,13 +34,14 @@ class Tasks:
         result['result'] = json.loads(result['result']) if result['result'] else None
         return result
 
-    def claim(self, owner, seconds=60):
+    def claim(self, owner, seconds=60, action=None):
         if not owner or seconds <= 0:
             raise ValueError('Invalid lease')
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             self.db.execute("UPDATE tasks SET state='interrupted',owner=NULL WHERE state IN ('running','pause_requested','cancel_requested') AND expires < ?", (time.time(),))
-            row = self.db.execute("SELECT id FROM tasks WHERE state='queued' ORDER BY rowid LIMIT 1").fetchone()
+            candidates = self.db.execute("SELECT id,payload FROM tasks WHERE state='queued' ORDER BY rowid").fetchall()
+            row = next((r for r in candidates if action is None or json.loads(r[1]).get('action') == action), None)
             if not row:
                 return None
             self.db.execute("UPDATE tasks SET state='running',owner=?,expires=? WHERE id=?", (owner, time.time()+seconds, row[0]))

@@ -11,6 +11,9 @@ class Catalogue:
         store.db.execute('''CREATE TABLE IF NOT EXISTS sources (
             source_id TEXT, version TEXT, hash TEXT, path TEXT,
             PRIMARY KEY(source_id,version))''')
+        with store.db:
+            store.db.execute('CREATE TABLE IF NOT EXISTS source_heads(source_id TEXT PRIMARY KEY,version TEXT NOT NULL)')
+            store.db.execute('INSERT OR IGNORE INTO source_heads SELECT source_id,version FROM sources GROUP BY source_id HAVING COUNT(*)=1')
 
     def ingest(self, entries, media_root):
         if not isinstance(entries, list) or not entries:
@@ -41,11 +44,16 @@ class Catalogue:
                 if previous and previous[0] != entry['sha256']:
                     raise ValueError('Source version reused with different content')
                 self.store.db.execute('INSERT INTO sources VALUES (?,?,?,?) ON CONFLICT(source_id,version) DO UPDATE SET path=excluded.path', (*key, entry['sha256'], entry['path']))
+                self.store.db.execute('INSERT INTO source_heads VALUES (?,?) ON CONFLICT(source_id) DO UPDATE SET version=excluded.version',key)
         return self.list()
 
     def list(self):
         rows = self.store.db.execute('SELECT source_id,version,hash,path FROM sources ORDER BY source_id,version').fetchall()
         return [dict(zip(('source_id', 'version', 'sha256', 'path'), row)) for row in rows]
+
+    def current(self):
+        rows=self.store.db.execute('SELECT s.source_id,s.version,s.hash,s.path FROM sources s JOIN source_heads h ON s.source_id=h.source_id AND s.version=h.version ORDER BY s.source_id').fetchall()
+        return [dict(zip(('source_id','version','sha256','path'),row)) for row in rows]
 
     def get(self, source_id, version):
         for entry in self.list():

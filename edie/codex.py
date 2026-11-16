@@ -24,13 +24,15 @@ class Codex:
                   '--skip-git-repo-check','--sandbox','read-only','--model',self.model,
                   '--disable','shell_tool','--disable','apps','--disable','multi_agent',
                   '--disable','multi_agent_v2','--disable','view_image','--disable','image_generation',
+                  '--disable','browser_use','--disable','computer_use','--disable','unified_exec',
+                  '--enable','skip_host_skill_discovery','-c','project_doc_max_bytes=0',
                   '-c','web_search="disabled"','-c','model_reasoning_effort="medium"',
                   '-C',directory,'--output-schema',str(spec),'--output-last-message',str(output),
                   '--json','-']
             environment={k:v for k,v in os.environ.items() if k in ('PATH','HOME','LANG','CODEX_HOME')}
             start=time.monotonic()
             with tempfile.TemporaryFile() as events:
-                result=subprocess.run(args,input=prompt.encode(),stdout=events,stderr=subprocess.DEVNULL,env=environment,timeout=self.timeout)
+                result=subprocess.run(args,input=('Return only the requested structured decision. Edie mediates every tool; do not invoke CLI tools or read files.\n'+prompt).encode(),stdout=events,stderr=subprocess.DEVNULL,env=environment,timeout=self.timeout)
                 if result.returncode or not output.is_file():raise ValueError('Codex decision failed; check subscription login/availability')
                 if output.stat().st_size>1024*1024:raise ValueError('Decision response too large')
                 usage=None
@@ -44,13 +46,13 @@ class Codex:
 
 class CodexSocket:
     """Decision-only local broker. The container receives a socket, never auth."""
-    def __init__(self,path):self.path=path
+    def __init__(self,path,stage='planning'):self.path=path;self.stage=stage
     def decide(self,prompt,schema):
         import socket
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
             connection.settimeout(300);connection.connect(self.path)
             stream=connection.makefile('rwb')
-            stream.write(json.dumps({'prompt':prompt,'schema':schema}).encode()+b'\n');stream.flush()
+            stream.write(json.dumps({'prompt':prompt,'schema':schema,'stage':self.stage}).encode()+b'\n');stream.flush()
             raw=stream.readline(2*1024*1024+1)
             if len(raw)>2*1024*1024:raise ValueError('Broker response too large')
             result=json.loads(raw)
@@ -58,7 +60,7 @@ class CodexSocket:
             return result['decision'],result['usage']
 
 
-def serve(path,model):
+def serve(path,model,models=None):
     import socketserver
     class Handler(socketserver.StreamRequestHandler):
         def handle(self):
@@ -67,7 +69,10 @@ def serve(path,model):
                 raw=self.rfile.readline(300*1024+1)
                 if len(raw)>300*1024:raise ValueError('Broker request too large')
                 request=json.loads(raw)
-                decision,usage=Codex(model,['private_text']).decide(request['prompt'],request['schema'])
+                stage=request.get('stage','planning')
+                if stage not in ('planning','review','repair'):raise ValueError('Unknown decision stage')
+                selected=(models or {}).get(stage,model)
+                decision,usage=Codex(selected,['private_text']).decide(request['prompt'],request['schema'])
                 result={'decision':decision,'usage':usage}
             except Exception:result={'error':'Subscription decision unavailable; no fallback attempted'}
             self.wfile.write(json.dumps(result).encode()+b'\n')
@@ -79,5 +84,5 @@ def serve(path,model):
 
 if __name__=='__main__':
     import argparse
-    p=argparse.ArgumentParser();p.add_argument('--socket',required=True);p.add_argument('--model',required=True)
-    a=p.parse_args();serve(a.socket,a.model)
+    p=argparse.ArgumentParser();p.add_argument('--socket',required=True);p.add_argument('--model',required=True);p.add_argument('--models-json')
+    a=p.parse_args();serve(a.socket,a.model,json.loads(Path(a.models_json).read_text()) if a.models_json else None)

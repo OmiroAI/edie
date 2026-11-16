@@ -26,6 +26,26 @@ class WorkflowTest(unittest.TestCase):
             with self.assertRaises(ValueError):w.reserve(job,'render',{'revision':'b'})
             store.db.close()
 
+    def test_supplied_script_invalidates_approval_until_reconciled(self):
+        with tempfile.TemporaryDirectory() as d:
+            store=Store(d);job=store.job(dict(goal='Test',audience='Test',format='16:9',duration=10,language='en'))
+            flow=Workflow(store);flow.start(job)
+            script={'title':'Original','clips':[]}
+            flow.update(job,0,dict(script=script,stage='review_script'))
+            flow.event(job,'approve-original',1,'approve',dict(scope='script',candidate=identity(script)))
+            payload=dict(text='Use my new story',supplied_script='Start with the demonstration.')
+            result=flow.event(job,'replacement',2,'instruction',payload)
+            self.assertEqual(flow.event(job,'replacement',2,'instruction',payload),result)
+            state=flow.get(job)
+            self.assertEqual(state['approvals'],{})
+            self.assertTrue(state['script_changes_pending'])
+            self.assertTrue(state['requested_run'])
+            self.assertEqual(state['supplied_script'],payload['supplied_script'])
+            with self.assertRaisesRegex(ValueError,'reconciled script'):
+                flow.event(job,'old-approval',3,'approve',dict(scope='script',candidate=identity(script)))
+            self.assertEqual(flow.get(job)['version'],3)
+            store.db.close()
+
     def test_agent_observes_then_proposes_and_parks_across_restart(self):
         class Decider:
             calls=0

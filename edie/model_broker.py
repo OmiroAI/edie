@@ -5,11 +5,13 @@ import json
 import os
 from pathlib import Path
 import socketserver
+import threading
 import urllib.request
 from .models import NoRedirect
 
 
 def serve(path,routes):
+    limits={name:threading.BoundedSemaphore(route.get('concurrency',1)) for name,route in routes.items()}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def do_POST(self):
@@ -37,8 +39,9 @@ def serve(path,routes):
                 if route.get('credential_env'):
                     headers['Authorization']='Bearer '+os.environ[route['credential_env']]
                 request=urllib.request.Request(route['base_url'].rstrip('/')+self.path,data=body,headers=headers)
-                with urllib.request.build_opener(NoRedirect).open(request,timeout=route.get('timeout',180)) as response:
-                    result=response.read(2*1024*1024+1)
+                with limits[route_name]:
+                    with urllib.request.build_opener(NoRedirect).open(request,timeout=route.get('timeout',180)) as response:
+                        result=response.read(2*1024*1024+1)
                 if len(result)>2*1024*1024:raise ValueError('Response limit')
                 self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(result)));self.end_headers();self.wfile.write(result)
             except Exception:

@@ -28,13 +28,24 @@ class Route:
         self.base = url.rstrip('/')
 
     def request(self, endpoint, body, content_type, payloads):
+        start=time.monotonic();usage=None
+        try:
+            result,usage=self._request(endpoint,body,content_type,payloads)
+            return result,usage
+        finally:
+            usage_file=self.config.get('usage_file') or os.getenv('EDIE_USAGE_FILE')
+            if usage_file:
+                from .usage import record
+                record(usage_file,usage or dict(model=self.config['model'],billing=self.config['billing'],seconds=time.monotonic()-start,known_cost_micro_usd=None,status='failed_or_uncertain'))
+
+    def _request(self, endpoint, body, content_type, payloads):
         if not set(payloads) <= set(self.config['allowed_payloads']):
             raise ValueError('Payload not permitted by route')
         if len(body) > self.config.get('max_request_bytes', 16*1024*1024):
             raise ValueError('Model request too large')
         headers = {'Content-Type': content_type}
         credential = self.config.get('credential_env')
-        if credential:
+        if credential and not self.config.get('socket'):
             value = os.environ.get(credential)
             if not value:
                 raise ValueError('Model authentication required')

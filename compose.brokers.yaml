@@ -1,0 +1,38 @@
+# Optional containerised brokers. Start these and provision subscription login
+# before starting workers that bind their socket files. No credentials in images.
+services:
+  codex-broker:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    user: "${EDIE_UID:-10001}:${EDIE_GID:-10001}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    init: true
+    command: [--socket, /run/edie/codex.sock, --model, "${EDIE_CODEX_MODEL:?Set supported subscription model}"]
+    volumes:
+      - ${EDIE_CODEX_HOME:?Set dedicated private subscription directory}:/auth
+      - ${EDIE_SOCKET_DIR:?Set private socket directory}:/run/edie
+  model-broker:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    user: "${EDIE_UID:-10001}:${EDIE_GID:-10001}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    init: true
+    # Only this trusted proxy reaches operator-configured local inference.
+    # Use host networking when endpoints are supplied through loopback tunnels.
+    network_mode: host
+    env_file:
+      - path: ${EDIE_MODEL_ENV_FILE:-./config/model.env}
+        required: false
+    entrypoint: [python3, -m, edie.model_broker]
+    command: [--socket, /run/edie/models.sock, --routes, /config/routes.json]
+    volumes:
+      - ${EDIE_HOST_ROUTES_FILE:?Set private local inference routes}:/config/routes.json:ro
+      - ${EDIE_SOCKET_DIR:?Set private socket directory}:/run/edie

@@ -57,7 +57,8 @@ no production deployment has been performed.
 One deployment owns one private editorial context; video jobs are its stories.
 There is no project-creation step.
 
-See [implemented runtime workflow and current limits](docs/runtime-workflow.md),
+See [editorial review workspace](docs/editorial-workspace.md),
+[implemented runtime workflow and current limits](docs/runtime-workflow.md),
 [private configuration, SOUL and MEMORY](docs/configuration.md),
 [agent contracts for review](docs/agent-contracts.md),
 [finishing-editor adapters](docs/editor-adapters.md), [OTIO timeline design](docs/timeline.md), [strategy and evaluation](docs/strategy-evaluation.md),

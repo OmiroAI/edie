@@ -23,24 +23,34 @@ def stop(process):
             process.wait()
 
 
-def run_once(root, media):
+def run_once(root, media, action="render", routes=None):
     store = Store(root)
     tasks = Tasks(store.db)
     owner = uuid.uuid4().hex
-    task = tasks.claim(owner)
+    task = tasks.claim(owner, action=action)
     if task is None:
         store.db.close()
         return False
     process = None
     try:
         payload = task['payload']
-        revision = store.get(payload['revision'], 'revision')
-        if payload['action'] != 'render' or revision['job'] != task['job']:
-            raise ValueError('Invalid task payload')
         attempt = uuid.uuid4().hex
-        # Unique attempt paths fence expired workers from newer artifacts.
-        command = [sys.executable, '-m', 'edie.worker', '--state', str(store.root),
-                   '--media', str(Path(media).resolve()), '--render', payload['revision'], '--attempt', attempt]
+        if action == 'render':
+            revision = store.get(payload['revision'], 'revision')
+            if payload['action'] != 'render' or revision['job'] != task['job']:
+                raise ValueError('Invalid task payload')
+            command = [sys.executable, '-m', 'edie.worker', '--state', str(store.root),
+                       '--media', str(Path(media).resolve()), '--render', payload['revision'], '--attempt', attempt]
+        elif action == 'review_proxy':
+            store.get(task['job'], 'job')
+            command = [sys.executable, '-m', 'edie.editorial', '--state', str(store.root),
+                       '--media', str(Path(media).resolve()), '--task', task['id']]
+        elif action == 'index' and routes:
+            store.get(task['job'], 'job')
+            command = [sys.executable, '-m', 'edie.index_worker', '--state', str(store.root),
+                       '--media', str(Path(media).resolve()), '--routes', str(Path(routes).resolve()), '--task', task['id']]
+        else:
+            raise ValueError('Unsupported worker capability')
         # No raw FFmpeg output is retained; it may include private source names.
         with tempfile.TemporaryFile() as output:
             process = subprocess.Popen(command, stdout=output, stderr=subprocess.DEVNULL,
@@ -55,10 +65,10 @@ def run_once(root, media):
                     break
                 time.sleep(0.5)
             if process.returncode:
-                tasks.stopped(task['id'], owner, 'failed', {'error': 'render_failed'})
+                tasks.stopped(task['id'], owner, 'failed', {'error': action+'_failed'})
                 return True
             output.seek(0)
-            artifact = json.loads(output.read(8192))
+            artifact = json.loads(output.read(1024*1024))
             # Only a live owner can publish the already validated artifact.
             tasks.finish(task['id'], owner, artifact)
     except Exception:

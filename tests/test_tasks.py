@@ -60,3 +60,13 @@ class QueueTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 queue.control(task, 'resume')
             store.db.close()
+
+class CapabilityQueueTest(unittest.TestCase):
+    def test_workers_only_claim_their_capability(self):
+        import sqlite3
+        db=sqlite3.connect(':memory:');tasks=Tasks(db)
+        index=tasks.submit('job','index',{'action':'index','sources':[]})
+        render=tasks.submit('job','render',{'action':'render','revision':'r'})
+        self.assertEqual(tasks.claim('renderer',action='render')['id'],render)
+        self.assertEqual(tasks.claim('indexer',action='index')['id'],index)
+        db.close()

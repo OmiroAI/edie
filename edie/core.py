@@ -43,6 +43,8 @@ class Store:
             raise ValueError('Brief fields must be nonempty text')
         if isinstance(brief['duration'], bool) or not isinstance(brief['duration'], (int, float)) or not math.isfinite(brief['duration']) or brief['duration'] <= 0:
             raise ValueError('Duration must be positive seconds')
+        if 'source_ids' in brief and (not isinstance(brief['source_ids'],list) or not 1<=len(brief['source_ids'])<=500 or not all(isinstance(s,str) and s for s in brief['source_ids'])):
+            raise ValueError('Invalid source scope')
         context = self.context.active() if self.context else None
         return self.put('job', {'brief': brief, 'context': context})
 
@@ -72,7 +74,7 @@ class Store:
         if not isinstance(clips, list) or not clips:
             raise ValueError('Timeline must contain clips')
         for clip in clips:
-            if (not isinstance(clip, dict) or not all(isinstance(clip.get(k), (int, float)) and not isinstance(clip[k], bool) and math.isfinite(clip[k]) for k in ('in', 'out'))
+            if (not isinstance(clip, dict) or set(clip)-{'path','sha256','in','out'} or not all(isinstance(clip.get(k), (int, float)) and not isinstance(clip[k], bool) and math.isfinite(clip[k]) for k in ('in', 'out'))
                     or not (0 <= clip['in'] < clip['out'])
                     or not isinstance(clip.get('path'), str)
                     or not isinstance(clip.get('sha256'), str)
@@ -101,6 +103,16 @@ def source(root, relative):
     if not path.is_relative_to(root) or not path.is_file():
         raise ValueError('Source outside authorised mount or missing')
     return path
+
+
+def media_source(store, root, clip):
+    relative=clip['path']
+    if store is not None and clip.get('source_id') and clip.get('version'):
+        from .index import Catalogue
+        entry=Catalogue(store).get(clip['source_id'],clip['version'])
+        if entry['sha256']!=clip['sha256']:raise ValueError('Source reference hash mismatch')
+        relative=entry['path']
+    return source(root,relative)
 
 
 def digest(path):
@@ -132,7 +144,10 @@ def render(store, revision, media_root, attempt=None):
         raise ValueError('Invalid attempt')
     destination = store.root / 'outputs' / revision / attempt
     destination.mkdir(parents=True, exist_ok=False)
-    profile = store.get(timeline['job'], 'job')['brief']['format']
+    job_record = store.get(timeline['job'], 'job')
+    if job_record.get('parent_job'):
+        media_root = store.root/'derivative_media'
+    profile = job_record['brief']['format']
     dimensions = {'16:9': (1280,720), '9:16': (720,1280), '1:1': (720,720)}
     if profile not in dimensions:
         raise ValueError('Unsupported output format')
@@ -140,11 +155,14 @@ def render(store, revision, media_root, attempt=None):
     fit = f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1'
     parts = []
     for index, clip in enumerate(timeline['clips']):
-        path = source(media_root, clip['path'])
+        path = media_source(store, media_root, clip)
         if digest(path) != clip['sha256']:
             raise ValueError('Source version changed')
+        if clip.get('proxy') and 'otio' in timeline:
+            path = source(store.root, clip['proxy']['path'])
+            if digest(path) != clip['proxy']['sha256']:raise ValueError('Editing proxy changed')
         metadata = probe(path)
-        if clip['out'] > float(metadata['format']['duration']):
+        if clip['out'] > float(metadata['format']['duration']) + (1/60 if 'otio' in timeline else 0):
             raise ValueError('Clip exceeds source duration')
         silent = not any(s['codec_type'] == 'audio' for s in metadata['streams'])
         if silent and not clip.get('silent'):
@@ -161,14 +179,30 @@ def render(store, revision, media_root, attempt=None):
     temporary = destination / 'preview.pending.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'concat', '-safe', '1', '-i', str(listing), '-c', 'copy', '-movflags', '+faststart', str(temporary)], check=True, capture_output=True, timeout=3600)
     for number, overlay in enumerate(timeline.get('overlays', [])):
-        path = source(media_root, overlay['path'])
+        path = media_source(store, media_root, overlay)
         if digest(path) != overlay['sha256']:
             raise ValueError('B-roll source changed')
+        if overlay.get('proxy'):
+            path = source(store.root, overlay['proxy']['path'])
+            if digest(path) != overlay['proxy']['sha256']:raise ValueError('B-roll proxy changed')
         layered = destination / f'layer-{number}.mp4'
         length = overlay['out'] - overlay['in']
         filters = f"[1:v]{fit},setpts=PTS-STARTPTS+{overlay['at']}/TB[b];[0:v][b]overlay=eof_action=pass:enable='gte(t,{overlay['at']})*lt(t,{overlay['at']+length})'[v]"
         subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(temporary), '-ss', str(overlay['in']), '-t', str(length), '-i', str(path), '-filter_complex', filters, '-map', '[v]', '-map', '0:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy', str(layered)], check=True, capture_output=True, timeout=3600)
         temporary = layered
+    if timeline.get('titles') or timeline.get('transitions'):
+        filters = []
+        for transition in timeline.get('transitions', []):
+            at, half = transition['at'], transition['duration']/2
+            filters.append(f"fade=t=out:st={at-half}:d={half}:enable='gte(t,{at-half})*lt(t,{at})'")
+            filters.append(f"fade=t=in:st={at}:d={half}:enable='gte(t,{at})*lt(t,{at+half})'")
+        for index, title in enumerate(timeline.get('titles', [])):
+            title_file = destination / f'title-{index}.txt'
+            title_file.write_text(title['text'])
+            filters.append(f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile='{title_file}':expansion=none:fontsize={width//28}:fontcolor=white:x=(w-text_w)/2:y=h*0.08:box=1:boxcolor=black@0.65:boxborderw=12:enable='gte(t,{title['start']})*lt(t,{title['end']})'")
+        titled = destination / 'titled.mp4'
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(temporary), '-vf', ','.join(filters), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy', str(titled)], check=True, capture_output=True, timeout=3600)
+        temporary = titled
     metadata = probe(temporary)
     expected = sum(c['out']-c['in'] for c in timeline['clips'])
     if abs(float(metadata['format']['duration'])-expected) > max(0.3, len(parts)*0.1):

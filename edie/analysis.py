@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import uuid
@@ -83,6 +84,7 @@ def main():
     p.add_argument('--routes',required=True);p.add_argument('--manifest',required=True)
     p.add_argument('--language');args=p.parse_args()
     store=Store(args.state)
+    os.environ["EDIE_USAGE_FILE"]=str(store.root/"usage.jsonl")
     entries=json.loads(Path(args.manifest).read_text())
     Catalogue(store).ingest(entries,args.media)
     routes=json.loads(Path(args.routes).read_text())

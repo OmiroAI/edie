@@ -5,6 +5,9 @@ x-runtime: &runtime
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   tmpfs: [/tmp]
+  pids_limit: 256
+  mem_limit: ${EDIE_MEMORY_LIMIT:-4g}
+  cpus: ${EDIE_CPUS:-2}
 
 services:
   edie:
@@ -22,12 +25,14 @@ services:
     entrypoint: [python, -m, edie.api]
     environment:
       EDIE_STATE: /state
+      EDIE_MEDIA: /media
       EDIE_CONFIG_DIR: /config
       EDIE_BIND: 0.0.0.0
       EDIE_API_TOKEN: ${EDIE_API_TOKEN:?Set private management token}
     ports: ["127.0.0.1:${EDIE_PORT:-8080}:8080"]
     networks: [management]
     volumes:
+      - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
       - ${EDIE_STATE:?Set private state directory}:/state
       - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
   worker:
@@ -50,6 +55,25 @@ services:
       - ${EDIE_CONFIG_DIR:?Set private configuration directory}/context:/config/context:ro
       - ${EDIE_ROUTES_FILE:-./config/routes.json}:/config/routes.json:ro
       - ${EDIE_CODEX_SOCKET:-./config/codex.sock}:/run/codex.sock
+      - ${EDIE_MODEL_SOCKET:-./config/models.sock}:/run/models.sock
+  proxy-worker:
+    <<: *runtime
+    entrypoint: [python, -m, edie.editorial, --state, /state, --media, /media]
+    network_mode: none
+    init: true
+    volumes:
+      - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
+      - ${EDIE_STATE:?Set private state directory}:/state
+  index-worker:
+    <<: *runtime
+    profiles: [agent]
+    entrypoint: [python, -m, edie.index_worker, --state, /state, --media, /media, --routes, /config/routes.json]
+    network_mode: none
+    init: true
+    volumes:
+      - ${EDIE_MEDIA:?Set authorised media directory}:/media:ro
+      - ${EDIE_STATE:?Set private state directory}:/state
+      - ${EDIE_ROUTES_FILE:-./config/routes.json}:/config/routes.json:ro
       - ${EDIE_MODEL_SOCKET:-./config/models.sock}:/run/models.sock
   analysis:
     <<: *runtime

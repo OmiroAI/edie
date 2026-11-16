@@ -1,0 +1,46 @@
+"""Optional real-browser acceptance using synthetic media, never real job approvals.
+Run in a container with Playwright/Chromium, project dependencies and FFmpeg.
+"""
+import json
+import tempfile
+import threading
+import subprocess
+from pathlib import Path
+from edie.api import Server,handler
+from edie.core import Store,digest
+from edie.index import Catalogue
+from edie.workflow import Workflow
+from edie.editorial import request_proxy
+from edie.worker import run_once
+from playwright.sync_api import sync_playwright
+
+with tempfile.TemporaryDirectory() as temp:
+    root=Path(temp);media=root/'media';media.mkdir()
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-t','4','-c:v','libx264',str(media/'demo.mp4')],check=True)
+    store=Store(root/'state');entry=dict(source_id='source-1',version='1',sha256=digest(media/'demo.mp4'),path='demo.mp4');Catalogue(store).ingest([entry],media)
+    folder=store.root/'index'/'source';folder.mkdir(parents=True);(folder/'index.json').write_text(json.dumps(dict(source=entry,duration=4,transcript=[dict(start=0,end=2,text='A surprising first impression.',timing_valid=True),dict(start=2,end=4,text='Here is the practical takeaway.',timing_valid=True)],visual=[dict(start=0,end=4,sampled_times=[1],observations='The presenter examines a compact camera on the table.')],coverage='Sparse overview')))
+    for title in ['Unboxing a new perspective','Discoveries from the exhibition']:
+        job=store.job(dict(goal=title,audience='Curious viewers',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job)
+        script=dict(title=title,angle='Does a dedicated camera earn a place next to your phone?',clips=[{**entry,'in':0,'out':2,'purpose':'An unexpected first impression'},{**entry,'in':2,'out':4,'purpose':'The practical takeaway'}],duration=4,missing_footage=[],review_notes=['Verify the model name before export.'])
+        flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy')
+    server=Server(('127.0.0.1',0),handler(store.root,'synthetic-browser-token-'*3));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    with sync_playwright() as p:
+        browser=p.chromium.launch(args=['--no-sandbox']);page=browser.new_page(viewport={'width':1512,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
+        page.goto(f'http://127.0.0.1:{server.server_address[1]}/dashboard');page.locator('#token').fill('synthetic-browser-token-'*3);page.get_by_role('button',name='Open workspace').click();page.get_by_role('heading',name='Source library').wait_for()
+        assert page.locator('#jobs button').count()==2
+        page.get_by_role('button',name='Play source',exact=True).click();page.locator('video').wait_for();page.wait_for_function('() => document.querySelector("video").readyState>=2')
+        page.get_by_label('Search transcript').fill('takeaway');assert page.locator('.cue').count()==1
+        page.screenshot(path='/output/footage.png',full_page=True)
+        page.get_by_role('button',name='Story & script',exact=True).click();assert page.locator('.beat').count()==2
+        page.get_by_title('Move later',exact=True).first.click();page.get_by_role('button',name='Save new story order',exact=True).click();page.wait_for_function('() => document.querySelector(".beat h3").textContent==="The practical takeaway"')
+        page.wait_for_function('() => document.querySelector(".proposal-select").options.length===2')
+        page.get_by_label('Script proposals').select_option(index=0);page.wait_for_function('() => document.querySelector(".beat h3").textContent==="An unexpected first impression"')
+        page.get_by_role('button',name='Play story sequence',exact=True).click();page.locator('video').wait_for();page.wait_for_function('() => document.querySelector("video").readyState>=2')
+        page.screenshot(path='/output/story.png',full_page=True)
+        page.locator('#intention').fill('Lead with the demonstration.');page.get_by_role('button',name='Send direction',exact=True).click();page.wait_for_function('() => document.querySelector("#send-status").textContent.includes("saved")');assert page.get_by_role('button',name='Approve script → create rough cut').is_disabled()
+        page.locator('#intention').fill('Unsent job-specific note');page.locator('#jobs button').nth(1).click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Discoveries from the exhibition"');assert page.locator('#intention').input_value()==''
+        page.locator('#jobs button').first.click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Unboxing a new perspective"');assert page.locator('#intention').input_value()=='Unsent job-specific note'
+        page.set_viewport_size({'width':390,'height':844});page.get_by_role('button',name='Footage',exact=True).click();page.screenshot(path='/output/mobile.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert errors==[],errors
+        browser.close();print('Browser acceptance passed: playback, search, proposals, reorder, approval invalidation, job isolation, mobile layout; no JavaScript errors.')
+    server.shutdown();thread.join();server.server_close();store.db.close()

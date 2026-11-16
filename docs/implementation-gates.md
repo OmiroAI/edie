@@ -1,54 +1,43 @@
-# Implementation roadmap and validation
+# Implementation and acceptance status
 
-This developer roadmap separates implemented utilities from the remaining agent
-capabilities and defines what evidence each delivery needs. It is not an extra
-operator approval workflow. Mocks and synthetic media are useful automated tests;
-real footage validates editorial behaviour. The initial core is not ready for production. Completion requires real authorised
-footage, actual finishing-application round trips and interruption recovery.
-Unit tests and synthetic clips cannot satisfy those gates.
+The [runtime workflow](runtime-workflow.md) is the authoritative implemented subset.
+The full product still requires broader feature coverage and real editorial acceptance.
 
-Still to implement:
+Implemented and tested in synthetic fixtures:
 
-- Selected OTIO timeline model, validated editing operations and render-plan
-  compilation; preserve legacy revisions when introducing the new format.
+- Versioned private context, Markdown snapshots, rollback and per-job pinning.
+- Source manifest verification, rename-safe indexing and bounded frame extraction.
+- Local transcription and vision adapters; explicit payload/model policies;
+  invalid transcript timings retained and flagged; no paid fallback.
+- Subscription Codex text broker and bounded durable decision loop, strict decision
+  schema, mediated tools, source-linked scripts and exact-candidate approval gates.
+- OTIO A-roll/dialogue plus one B-roll track, source-derived cues, aspect-fit preview
+  rendering and soft subtitles, XML/SRT/media/MP4 handoff.
+- Queue leases, pause/cancel acknowledgement, explicit recovery, idempotent dispatch,
+  stale event rejection and accepted returned-master precedence.
+- Authenticated records/workflow API, review dashboard, derivative parent gating,
+  conservative storage admission, visible usage and accepted-learning proposals.
 
-- Codex execution in a separate sandbox with task-specific configurable models,
-  isolated subscription renewal, structured outputs and no management secrets.
-- Separate visual and Whisper-compatible transcription adapters; verified
-  deployment endpoints, explicit payload permissions and no paid fallback.
-- Broker API integration, model-generated reusable metadata, organisation
-  proposals and collision validation. A local manifest importer now verifies
-  stable source IDs/versions/hashes and supports rename-safe frame caching.
-- Source-linked story scripts, missing-footage reporting and script approval.
-- Layered rendering, graphics, transitions, grammar-preserving timed subtitles,
-  uncertain terminology, transcript preservation and subtitle languages.
-- Premiere-compatible FCP7 XML, assets, per-language SRT and reference preview;
-  editable human-return ingestion and accepted-master precedence.
-- Production API hardening and dashboard sharing the same durable records.
-  A development bearer-token API now supports records and task submission.
-- Revision lifecycle, accepted-edit protection, render deduplication and
-  frame-level recovery checkpoints. A render worker now handles leases, running
-  pause/cancel requests, explicit recovery and artifact publication.
-- Main approval before derivatives, final approval, delivery packages, covers,
-  posting materials and reversible deployment-local accepted-feedback learning.
-- Per-video budget reservations, actual model usage/cost/retry accounting.
-- Export stream/timing/bounds validation and visual/audio defect review beyond
-  the currently implemented decode and duration checks.
-- API security, integration, Docker and real-render test suites and CI.
+Real-footage trial in progress:
 
-Operator inputs outstanding: authorised footage mount and broker manifest,
-finishing application/version, subtitle languages, style baseline, approved
-cloud payloads and model routes. Private integrations must remain outside the
-public source tree. The management API is also the intended initial external
-agent integration; messaging adapters must not bypass revision bindings.
+- Two authorised collections downloaded outside Git; local speech and visual
+  generation verified; subscription text-only connectivity verified.
+- Private jobs completed the initial observe/decide/inspect/propose loop and are
+  parked at script review. The proposed drafts are approximately 98 seconds and
+  4:31. Their source references and subtitle bounds pass preflight checks.
+- Two-second technical render previously passed. This does not count as either
+  requested editorial output.
+- Full two-story previews, review/feedback, actual finishing-editor handoff and
+  real-job recovery have not yet passed acceptance. Keep evidence private.
 
-Earlier validation: record persistence across reopen,
-cross-job approval rejection, traversal and symlink escape rejection. FFmpeg remains unavailable on the host but is installed in the tested Docker
-image. Ten tests pass inside Docker, including synthetic rendering through
-the queue, source-change rejection, lease recovery and control acknowledgement.
-A two-second preview from authorised footage also rendered successfully in a
-network-isolated container; private evidence stays outside this repository.
-This is a technical render check, not an accepted story or complete workflow.
-Local frame preprocessing also extracted six frames from an authorised clip and
-reused the cache on a second pass. Subsequent model-access work verified local
-model listings/health; authenticated gateway generation remains unverified.
+Remaining work includes richer graphics/transitions and editing
+operations, semantic subtitle review and visual typography checks,
+source-native/VFR finishing fidelity, finishing-editor compatibility across formats, richer
+derivative layouts and posting materials,
+concurrent resource reservations, production API hardening and deployment lifecycle
+verification. These must not be represented as completed merely because a draft
+cut is watchable.
+
+Actual finishing application/version remains an operator input. Model judges return
+coverage and findings, not automatic editorial approval. Final human approval and
+broker delivery receipt are distinct gates, and publishing remains external.

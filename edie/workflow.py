@@ -21,7 +21,7 @@ class Workflow:
     def start(self,job,limits=None):
         self.store.get(job,'job')
         body=dict(stage='indexing',requested_run=False,run_id=uuid.uuid4().hex,plan=[],script=None,revision=None,delivery=None,
-                  approvals={},accepted_master=None,feedback=[],turns=0,usage=[],limits=limits or dict(turns=30,cost_micro_usd=20000000),control='active')
+                  approvals={},accepted_master=None,accepted_revision=None,feedback=[],turns=0,usage=[],limits=limits or dict(turns=30,cost_micro_usd=20000000),control='active')
         with self.db:self.db.execute('INSERT OR IGNORE INTO workflows VALUES (?,0,?)',(job,json.dumps(body)))
         return self.get(job)
 
@@ -56,17 +56,36 @@ class Workflow:
             current=self.get(job)
             if current['version']!=expected:raise ValueError('Stale human event')
             if kind=='approve':
+                if current.get('script_changes_pending'):raise ValueError('Review the reconciled script before approving')
                 scope=payload['scope'];candidate=payload['candidate']
                 field={'script':'script','main':'revision','final':'delivery'}.get(scope)
                 if not field or not current[field] or identity(current[field])!=candidate:raise ValueError('Approval does not match candidate')
-                if scope in ('main','final') and not current.get('validation'):raise ValueError('Validation required')
+                if scope in ('main','final') and (not current.get('validation') or current['validation'].get('decode')!='passed'):raise ValueError('Validation required')
                 prerequisite={'main':'script','final':'main'}.get(scope)
                 if prerequisite and prerequisite not in current['approvals']:raise ValueError('Prior approval required')
                 if scope=='main':
                     revision=self.store.get(current['revision'],'revision')
-                    if revision.get('master'):current['accepted_master']=revision['master']
+                    current['accepted_revision']=current['revision']
+                    current['accepted_master']=revision.get('master')
                 current['approvals'][scope]=candidate
                 current['stage']={'script':'editing','main':'delivery','final':'awaiting_receipt'}[scope]
+            elif kind in ('select_script','arrange_script'):
+                if current.get('revision') or current.get('accepted_revision') or current['stage'] not in ('review_script','reconciling'):
+                    raise ValueError('Existing edit requires an agent revision request')
+                history=current.get('script_proposals',[])
+                if current.get('script') and not any(identity(p)==identity(current['script']) for p in history):history.append(current['script'])
+                if kind=='select_script':
+                    selected=next((p for p in history if identity(p)==payload['candidate']),None)
+                    if selected is None:raise ValueError('Unknown proposal')
+                else:
+                    if identity(current['script'])!=payload['candidate']:raise ValueError('Stale script')
+                    order=payload['order'];clips=current['script']['clips']
+                    if not isinstance(order,list) or any(type(n)!=int for n in order) or sorted(order)!=list(range(len(clips))):raise ValueError('Expected clip permutation')
+                    if current['script'].get('overlays') or current['script'].get('titles') or current['script'].get('transitions'):raise ValueError('Ask agent to reconcile dependent graphics and B-roll')
+                    selected={**current['script'],'clips':[clips[n] for n in order],'arranged_by':actor}
+                    selected.pop('evaluation',None)
+                    if not any(identity(p)==identity(selected) for p in history):history.append(selected)
+                current.update(script=selected,script_proposals=history,script_changes_pending=False,approvals={},stage='review_script',validation=None,delivery=None)
             elif kind=='feedback':
                 revision=payload['revision']
                 if self.store.get(revision,'revision')['job']!=job:raise ValueError('Wrong feedback job')
@@ -76,12 +95,24 @@ class Workflow:
                 if isinstance(timestamp,bool) or not isinstance(timestamp,(int,float)) or not math.isfinite(timestamp) or timestamp<0:raise ValueError('Invalid feedback timestamp')
                 current['feedback'].append(payload)
                 current['stage']='revising'
+            elif kind=='instruction':
+                if not isinstance(payload.get('text'),str) or not payload['text'].strip():raise ValueError('Instruction text required')
+                current.setdefault('instructions',[]).append({'event_id':event_id,'text':payload['text'],'actor':actor})
+                if payload.get('supplied_script') is not None:
+                    if not isinstance(payload['supplied_script'],str) or not payload['supplied_script'].strip():raise ValueError('Script must be nonempty text')
+                    current['supplied_script']=payload['supplied_script']
+                    current['script_changes_pending']=True
+                    current['approvals']={}
+                if current.get('script') and not current.get('revision'):
+                    current['script_changes_pending']=True
+                    current['approvals']={}
+                current['question']=None;current['stage']='reconciling'
             elif kind=='human_return':
                 revision=self.store.get(payload['revision'],'revision')
-                if revision['job']!=job or revision.get('author')!='human' or not revision.get('validation'):raise ValueError('Verified human return required')
+                if revision['job']!=job or revision.get('author')!='human':raise ValueError('Verified human return required')
                 if revision['parent']!=current['revision']:raise ValueError('Return targets stale base revision')
-                current['revision']=payload['revision'];current['validation']=revision['validation']
-                current['delivery']=None;current['stage']='review_main'
+                current['revision']=payload['revision'];current['validation']=revision.get('validation')
+                current['delivery']=None;current['stage']='review_main' if revision.get('master') else 'editing'
                 current['approvals']={k:v for k,v in current['approvals'].items() if k=='script'}
             elif kind=='receipt':
                 if current['approvals'].get('final')!=identity(current['delivery']) or payload['manifest_hash']!=current['delivery']['manifest_hash']:raise ValueError('Unapproved delivery receipt')
@@ -109,7 +140,7 @@ class Workflow:
                 for item in order[order.index(scope):]:current['approvals'].pop(item,None)
                 current['stage']='review_'+scope
             else:raise ValueError('Unknown human event')
-            current['requested_run']=kind in ('approve','feedback','resume','recover')
+            current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction')
             current.pop('job');current.pop('version')
             result={'id':event_id,'job':job,'version':expected+1,'kind':kind,'payload':payload,'received_at':time.time(),'actor':actor}
             self.db.execute('INSERT INTO events VALUES (?,?,?,?)',(event_id,job,key,json.dumps(result)))
