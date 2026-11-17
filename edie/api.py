@@ -75,6 +75,9 @@ def handler(root, token):
                 if self.command == 'GET':
                     if path == ['workspaces']:
                         return self.respond(200,json.loads(os.getenv('EDIE_REVIEW_WORKSPACES','[{"label":"Edie","prefix":""}]')))
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='moments':
+                        from .moments import read
+                        store.get(path[1],'job');return self.respond(200,read(store,path[1]))
                     if len(path)==3 and path[0]=='jobs' and path[2]=='capture':
                         from .capture import Capture
                         store.get(path[1],'job');return self.respond(200,Capture(store).get(path[1]))

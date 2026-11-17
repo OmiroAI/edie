@@ -122,6 +122,17 @@ with tempfile.TemporaryDirectory() as temp:
         page.locator('#jobs button').first.click();page.wait_for_function('() => document.querySelector("#job-title").textContent==="Unboxing a new perspective"');assert page.locator('#intention').input_value()=='Unsent job-specific note'
         page.set_viewport_size({'width':390,'height':844});page.get_by_role('button',name='Footage',exact=True).click();page.screenshot(path='/output/mobile.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.set_viewport_size({'width':1512,'height':1100});page.locator('#jobs button').nth(1).click();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).wait_for();page.get_by_role('button',name='Confirm selection → suggest stories',exact=True).click();page.wait_for_function('() => state.stage==="planning"');page.get_by_role('button',name='Story & script',exact=True).click();page.get_by_role('heading',name='Edie is developing story options').wait_for()
+        page.locator('#jobs button').first.click();page.wait_for_function('()=>current.brief.goal==="Unboxing a new perspective"')
+        root_job=page.evaluate('current.id');config=Capture(store).get(root_job)
+        config['groups'][0]['members'][1]['alignment_review']='automatic'
+        Capture(store).save(root_job,config,config['revision'],'fixture')
+        page.evaluate('()=>loadJob(false)');page.get_by_role('button',name='Segments',exact=True).click()
+        page.locator('.sources .source').filter(has_text='camera views').first.click()
+        page.get_by_role('heading',name='One moment · multiple camera views',exact=True).wait_for()
+        assert page.locator('.sources .source').filter(has_text='Short insert').count()==0
+        page.get_by_role('button',name='Inspect picture (muted)',exact=True).first.click()
+        page.wait_for_function('()=>document.querySelector("#player video")?.muted===true')
+        page.screenshot(path='/output/grouped-moment.png',full_page=True)
         assert errors==[],errors
         browser.close();print('Browser acceptance passed: playback, search, classification overrides/filtering/duration sorting, proposals, reorder, approval invalidation, job isolation, mobile layout; no JavaScript errors.')
     server.shutdown();thread.join();server.server_close();store.db.close()

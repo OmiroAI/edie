@@ -59,3 +59,5 @@ migration or deletion occurs; a selective migration tool is still needed if thos
 historical jobs must be resumed. Old media and output files remain untouched.
 
 See [multicam sessions and audio-led layers](multicam-and-layers.md) for camera alignment, review gates, API contracts and picture coverage.
+
+See [synchronized editorial moments](editorial-segments.md#synchronized-editorial-moments) for grouped segment review, the moments API and duplicate-dialogue planning guards.

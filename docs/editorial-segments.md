@@ -114,3 +114,45 @@ The old one-sided `boundary` action and `/classification` endpoint are removed.
 Index workers no longer trigger whole-file role classification; segment workers own
 editorial roles. Running older worker containers may finish their current jobs before
 being upgraded; indexing caches and live segmentation are not discarded.
+
+## Synchronized editorial moments
+
+Implemented as a read-only projection over source segments and capture alignment.
+A moment has one primary dialogue segment (and its score, labels and selection),
+plus source-linked alternate picture ranges. The preferred audio source identifies
+the primary camera; other recordings from that camera supply subsequent dialogue
+segments. The anchor clock can belong to the product camera without making its
+microphone the preferred dialogue. Confirmed groups and automatically accepted
+individual matches may be grouped in review; an uncertain member is never inferred
+from coincident timing. Existing session review gates still apply before scripting.
+
+The default Segments list shows moments, not duplicate microphone recordings.
+Alternate angles appear inside the primary moment with their exact source ranges,
+availability and muted-picture inspection buttons. Coverage can be partial or span
+several underlying source segments. Its copied speech score is not added to the
+primary moment's score. Rejected angles remain marked unavailable. Primary ranges
+and labels retain their normal editing controls; boundary changes reproject coverage
+on refresh without rewriting the other source's partition.
+
+Detail-source material outside trusted coverage remains visible as unmatched
+fragments. Fragment labels/selection explicitly apply to the whole underlying source
+segment; boundary tools are withheld there to avoid pretending a derived fragment
+is an independently saved segment. Original source records, transcripts, segment
+IDs, human decisions and existing scripts are not rewritten or deleted. A source
+version change, rejected session or excluded member removes the derived link.
+
+GET `/jobs/ID/moments` returns `schema_version`, `capture_revision`, `items`,
+`relations`, `raw_segment_count` and `policy`. Items reference the primary source
+and segment, visible start/end, fragment status and alternate `angles`. Each angle
+carries its original segment ID, source range, corresponding primary range, camera,
+selection and capture reference. Relations describe primary/picture clock mappings.
+The API, dashboard and planner use this same projection. Root-library scoping
+continues to apply to independent outputs.
+
+Planning summaries and `read_sources` expose the moment grouping and duplicate-audio
+ranges. New script proposals, script approval/output creation and timeline generation
+reject primary dialogue clips from synchronized secondary-camera coverage: choose
+its primary moment and add muted picture instead. This guard does not prohibit a
+standalone unmatched detail clip, prove its editorial value, or perform semantic
+transcript deduplication. Existing accepted renders remain untouched. Actual
+alternate-camera render use still requires the existing sync approval/version gates.

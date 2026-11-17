@@ -47,6 +47,9 @@ def resolve_overlay(agent,job,item,clips):
 
 
 def validate_sync(store,job,script):
+    if script.get('clips'):
+        from .moments import validate_dialogue
+        validate_dialogue(store,job,script['clips'])
     config=None
     for item in script.get('overlays',[]):
         if not item.get('sync'):continue

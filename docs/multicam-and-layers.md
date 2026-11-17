@@ -176,3 +176,5 @@ and records its own actor in the capture audit. It never approves footage select
 or scripts. Existing proposals can be migrated through `accept-confident` without
 re-indexing or changing the source offsets. Confident members are hidden from the
 required review list; uncertainty remains visible.
+
+See [synchronized editorial moments](editorial-segments.md#synchronized-editorial-moments) for grouped segment review, the moments API and duplicate-dialogue planning guards.
