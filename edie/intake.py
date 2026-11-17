@@ -30,7 +30,7 @@ def reconcile(store, job):
         ranked = [p for p in parts if p.get('profile')==2 and p.get('selection')!='rejected']
         score=max((p.get('score',0) for p in ranked),default=0)
         usable = [p for p in parts if p.get('profile') == 2 and
-                  p.get('score', 0) >= threshold and 'needs_review' not in p['labels'] and
+                  p.get('score', 0) >= threshold and
                   p.get('selection') != 'rejected']
         dense = isinstance(index.get('coverage'), dict) and bool(index['coverage'].get('profile'))
         pending = not dense or not parts

@@ -43,8 +43,8 @@ class IntakeTest(unittest.TestCase):
             parts=propose(index)
             for p in parts:p.update(profile=2,score=99,labels=['needs_review'])
             Segments(store).save(job,index,parts,0,False);reconcile(store,job)
-            self.assertTrue(needs_review(repo.get(job,entries[0])))
-            self.assertEqual(repo.get(job,entries[0])['suggestion']['status'],'uncertain')
+            self.assertFalse(needs_review(repo.get(job,entries[0])))
+            self.assertEqual(repo.get(job,entries[0])['suggestion']['status'],'decided')
             store.db.close()
 
     def test_rescale_preserves_decisions_and_order_and_is_idempotent(self):

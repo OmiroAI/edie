@@ -55,19 +55,14 @@ with tempfile.TemporaryDirectory() as temp:
         assert page.locator('.classification-detail .section-head h3').inner_text()=='short.mp4'
         page.get_by_role('button',name='Keep',exact=True).click()
         page.get_by_role('button',name='Save & next →',exact=True).click()
-        page.wait_for_function('() => document.querySelector(".classification-detail .section-head h3").textContent==="demo.mp4"')
-        assert page.locator('.source').count()==1
-        page.get_by_role('button',name='Exit review mode',exact=True).click()
-        page.get_by_role('button',name='Review mode',exact=True).click()
-        assert page.locator('.classification-detail .section-head h3').inner_text()=='demo.mp4'
-        assert page.locator('.source').count()==1
-        page.get_by_role('button',name='Confirm Edie’s keep suggestion & next →',exact=True).click()
         page.get_by_role('button',name='Review mode',exact=True).wait_for()
-        assert 'keep' in page.locator('.human-decision').inner_text()
-        assert 'keep' in page.locator('.agent-suggestion').inner_text()
         page.get_by_role('button',name='Review mode',exact=True).click()
         assert page.get_by_role('button',name='Exit review mode',exact=True).count()==0
         page.locator('.source').filter(has_text='demo.mp4').click()
+        page.get_by_role('button',name='Confirm Edie’s keep suggestion',exact=True).click()
+        page.wait_for_function('() => document.querySelector(".human-decision").textContent.startsWith("keep")')
+        assert 'keep' in page.locator('.human-decision').inner_text()
+        assert 'keep' in page.locator('.agent-suggestion').inner_text()
         page.screenshot(path='/output/footage.png',full_page=True)
         page.get_by_role('button',name='Segments',exact=True).click();page.get_by_role('heading',name='Editorial segments').wait_for()
         page.get_by_role('button',name='Play segment',exact=True).click();page.locator('video').wait_for()

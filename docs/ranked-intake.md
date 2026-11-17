@@ -14,8 +14,9 @@ The initial policy threshold is 70, configurable through the coordinator's runti
 `EDIE_INTAKE_REVIEW_THRESHOLD` integer (0–100). Scores below the threshold require review.
 
 Edie keeps a densely indexed file when at least one semantic segment meets the threshold
-and has no `needs_review` label. Otherwise it asks for judgement. Uncertain evidence can
-require review even above the threshold. Low usefulness, low brief fit, lack of dialogue,
+regardless of segment uncertainty labels. Otherwise it asks for judgement. Segment
+uncertainty remains visible in segment review; a high file rank makes the source
+available, not mandatory in a script. Low usefulness, low brief fit, lack of dialogue,
 or Blooper alone never cause automatic exclusion. Mistaken/poor-quality recordings
 without sufficient positive evidence are flagged for review, not deleted.
 
@@ -26,20 +27,20 @@ identified by this policy. No local/remote original is deleted or renamed.
 
 Suggestions are revisioned and audited with actor `edie-intake-v1`, source version/hash,
 policy profile, evidence hash, score, threshold, status, review requirement and reason.
-Human overrides always win, including an explicit return to Unreviewed. Unchanged
+Human overrides always win, including an explicit return to Unreviewed (which still requires a manual decision in the ordinary
+library if the rank is above the review-mode threshold). Unchanged
 suggestions are not rewritten on every coordinator tick. Changed evidence refreshes
 suggestions; exact selection confirmation is invalidated when decisions/segments change.
 Old whole-file role suggestions are not treated as intake decisions.
 
 ## Review interface
 
-Review mode walks files without a confirmed human Keep/Exclude decision from lowest rank
-to highest, with filename as
+Review mode walks only analysed files below the threshold without a confirmed human
+Keep/Exclude decision, from lowest rank to highest, with filename as
 the deterministic tie-breaker. It clears list filters on entry and snapshots the order
 so new analysis cannot move the current file mid-review. **Save & next** persists the
-human choice, then advances. It continues through higher-ranked suggestions after the
-flagged files; users may leave mode at any time. Pending files remain visible as awaiting
-analysis. Re-entering mode rebuilds the remaining queue from persisted decisions and current ranks.
+human choice, then advances. It stops when that queue is complete. Higher-ranked suggestions and pending analysis
+remain available in the ordinary library, outside Review mode. Re-entering mode rebuilds the remaining queue from persisted decisions and current ranks.
 Confirmed files stay accessible in the ordinary library, but never appear in Review mode.
 An explicit Unreviewed decision puts a file back into the queue.
 
@@ -87,3 +88,14 @@ Migration tests verify ordering, idempotence and preserved exclusions. Browser t
 confirm a low-ranked file, exit/re-enter, verify only the remaining file appears, confirm
 its suggestion and verify the completed queue does not reopen. Selection confirmation
 still uses exact decisions/segments, so changed score records require reconfirmation.
+
+### Threshold-only review and accurate counters
+
+The Review mode button and Review flagged files banner both reload current records and
+start the same ascending queue: no human Keep/Exclude, analysis available, score strictly
+below the configured threshold (70 by default). Exactly 70 is outside this queue. No
+higher-ranked suggestion is added at the end. File progress separates human-confirmed,
+automatically suggested, awaiting analysis and requiring-review counts; it never calls
+an automatic suggestion a human decision. The ordinary library supports optional
+confirmation/override of all scores. Historical task error results are shown as errors
+only while the task is failed/interrupted, not while a recovered attempt is running.
