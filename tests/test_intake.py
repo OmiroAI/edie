@@ -46,3 +46,33 @@ class IntakeTest(unittest.TestCase):
             self.assertTrue(needs_review(repo.get(job,entries[0])))
             self.assertEqual(repo.get(job,entries[0])['suggestion']['status'],'uncertain')
             store.db.close()
+
+    def test_rescale_preserves_decisions_and_order_and_is_idempotent(self):
+        from edie.rescale import rescale
+        with tempfile.TemporaryDirectory() as d:
+            store,job,entries=test_classification.ClassificationTest().fixture(d)
+            repo=Classifications(store)
+            for key,index in indexes(store,job).items():
+                parts=propose(index)
+                for p in parts:p.update(profile=2,origin='agent',score=3 if key=='0' else 4,story_fit=5)
+                Segments(store).save(job,index,parts,0,False)
+            reconcile(store,job)
+            r=repo.get(job,entries[0]);repo.save(job,entries[0],dict(disposition='exclude',labels=[],reason='Keep my exclusion'),r['revision'],True)
+            before=repo.get(job,entries[0])['override']
+            self.assertEqual(rescale(store,job),7)
+            self.assertEqual(rescale(store,job),0)
+            self.assertEqual(repo.get(job,entries[0])['override'],before)
+            self.assertEqual(Segments(store).get(job,entries[0])['items'][0]['score'],60)
+            self.assertEqual(Segments(store).get(job,entries[1])['items'][0]['score'],80)
+            store.db.close()
+
+    def test_confirmation_retains_suggestion_snapshot(self):
+        with tempfile.TemporaryDirectory() as d:
+            store,job,entries=test_classification.ClassificationTest().fixture(d);repo=Classifications(store)
+            suggested=dict(disposition='keep',labels=[],reason='Useful',intake_profile=1,score=80)
+            repo.save(job,entries[0],suggested)
+            repo.save(job,entries[0],dict(disposition='keep',labels=[],reason='Confirmed'),1,True)
+            saved=repo.get(job,entries[0])
+            self.assertEqual(saved['suggestion'],suggested)
+            self.assertEqual(saved['override']['confirmed_suggestion'],suggested)
+            store.db.close()

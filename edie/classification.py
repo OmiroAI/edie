@@ -33,6 +33,8 @@ class Classifications:
             self.db.execute('BEGIN IMMEDIATE');current=self.get(job,entry)
             if human and current['revision']!=expected:raise ValueError('Stale classification')
             body={key:current[key] for key in ('suggestion','override')}
+            if human and value is not None:
+                value={**value,'confirmed_suggestion':current['suggestion'] if current['suggestion'] and value.get('disposition')==current['suggestion'].get('disposition') else None}
             body['override' if human else 'suggestion']=value
             self.db.execute('INSERT OR REPLACE INTO classifications VALUES (?,?,?,?,?,?)',(job,entry['source_id'],entry['version'],entry['sha256'],current['revision']+1,json.dumps(body)))
             self.db.execute('INSERT INTO classification_events(job,source_id,body) VALUES (?,?,?)',(job,entry['source_id'],json.dumps(dict(at=time.time(),actor=actor,version=entry['version'],sha256=entry['sha256'],human=human,value=value))))

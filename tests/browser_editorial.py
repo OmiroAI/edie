@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory() as temp:
     for title in ['Unboxing a new perspective','Discoveries from the exhibition']:
         job=store.job(dict(goal=title,audience='Curious viewers',format='16:9',duration=4,language='en'));flow=Workflow(store);flow.start(job,footage_review_required=title!='Unboxing a new perspective')
         script=dict(title=title,angle='Does a dedicated camera earn a place next to your phone?',clips=[{**entry,'in':0,'out':2,'purpose':'An unexpected first impression'},{**entry,'in':2,'out':4,'purpose':'The practical takeaway'}],duration=4,missing_footage=[],review_notes=['Verify the model name before export.'])
-        Classifications(store).save(job,entry,dict(disposition='unreviewed',labels=[],reason='Specific discovery; uncertain evidence.',score=90,intake_profile=1,status='uncertain',review_required=True,review_threshold=70))
+        Classifications(store).save(job,entry,dict(disposition='keep',labels=[],reason='Specific discovery.',score=90,intake_profile=1,status='decided',review_required=False,review_threshold=70))
         Classifications(store).save(job,extra,dict(disposition='unreviewed',labels=[],reason='Short illustrative insert.',score=30,intake_profile=1,status='uncertain',review_required=True,review_threshold=70))
         from edie.segments import Segments
         Segments(store).save(job,dict(source=entry,duration=4),[dict(id='segment-one',start=0,end=4,title='A complete thought',labels=['a_roll'],selection='available',score=90,reason='Specific discovery.',origin='agent')],0,False)
@@ -49,10 +49,25 @@ with tempfile.TemporaryDirectory() as temp:
         page.get_by_label('Filter file decision').select_option('exclude');assert page.locator('.source').count()==0
         page.get_by_label('Filter file decision').select_option('keep');assert page.locator('.source').count()==2
         page.get_by_label('Filter file decision').select_option('all');page.get_by_label('Sort footage').select_option('longest');assert page.locator('.source strong').first.inner_text()=='demo.mp4';page.get_by_label('Sort footage').select_option('shortest');assert page.locator('.source strong').first.inner_text()=='short.mp4';page.get_by_label('Sort footage').select_option('name')
-        page.get_by_role('button',name='Review mode',exact=True).click();assert page.locator('#classification-editor').get_attribute('open') is not None;assert page.locator('input[type=checkbox]').count()==0
+        # Return both decisions to the review queue; persistence is server-side.
+        page.evaluate("""async()=>{for(const f of await api('/jobs/'+current.id+'/footage'))await api('/jobs/'+current.id+'/sources/'+f.source_id+'/disposition',{source_version:f.version,source_sha256:f.sha256,expected_revision:f.classification.revision,disposition:'unreviewed',reason:'Revisit decision'});await loadJob(false)}""")
+        page.get_by_role('button',name='Review mode',exact=True).click()
         assert page.locator('.classification-detail .section-head h3').inner_text()=='short.mp4'
-        page.get_by_role('button',name='Save & next →',exact=True).click();page.wait_for_function('() => document.querySelector(".classification-detail .section-head h3").textContent==="demo.mp4"')
-        page.get_by_role('button',name='Keep',exact=True).click();page.get_by_role('button',name='Save & next →',exact=True).click();page.get_by_role('button',name='Review mode',exact=True).wait_for();page.locator('.source').filter(has_text='demo.mp4').click()
+        page.get_by_role('button',name='Keep',exact=True).click()
+        page.get_by_role('button',name='Save & next →',exact=True).click()
+        page.wait_for_function('() => document.querySelector(".classification-detail .section-head h3").textContent==="demo.mp4"')
+        assert page.locator('.source').count()==1
+        page.get_by_role('button',name='Exit review mode',exact=True).click()
+        page.get_by_role('button',name='Review mode',exact=True).click()
+        assert page.locator('.classification-detail .section-head h3').inner_text()=='demo.mp4'
+        assert page.locator('.source').count()==1
+        page.get_by_role('button',name='Confirm Edie’s keep suggestion & next →',exact=True).click()
+        page.get_by_role('button',name='Review mode',exact=True).wait_for()
+        assert 'keep' in page.locator('.human-decision').inner_text()
+        assert 'keep' in page.locator('.agent-suggestion').inner_text()
+        page.get_by_role('button',name='Review mode',exact=True).click()
+        assert page.get_by_role('button',name='Exit review mode',exact=True).count()==0
+        page.locator('.source').filter(has_text='demo.mp4').click()
         page.screenshot(path='/output/footage.png',full_page=True)
         page.get_by_role('button',name='Segments',exact=True).click();page.get_by_role('heading',name='Editorial segments').wait_for()
         page.get_by_role('button',name='Play segment',exact=True).click();page.locator('video').wait_for()

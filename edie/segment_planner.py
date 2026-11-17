@@ -24,6 +24,8 @@ The brief and context can suggest preferred granularity. Do not force uniform du
 or shorten a demonstration merely to match the final output length. Explain boundaries.
 Labels overlap. Blooper means an evidenced slip, failed take, interruption, mishap or
 funny unexpected reaction; it is NOT rejection. Preserve context and don't invent humour.
+Use a 0–100 integer scale for score and story_fit, never a 1–5 scale.
+Anchors: 0 unusable, 20 weak, 40 limited, 60 usable, 80 strong, 100 exceptional.
 Score intrinsic editorial usefulness independently from story_fit (relevance to this
 brief, not a probability and not a permanent judgement for every future story).
 A low score never rejects footage. Flag uncertain evidence with needs_review.
@@ -63,7 +65,7 @@ def plan(index,brief,context,decider,cache,usage_file):
         for s in parts:
             if abs(s['start']-cursor)>0.001 or not start<=s['start']<s['end']<=end:raise ValueError('Invalid semantic partition')
             if s['end']!=end and any(c.get('timing_valid',True) and c['start']<s['end']<c['end'] for c in index['transcript']):raise ValueError('Proposed boundary splits speech')
-            s.update(id=identity([index['source'],s['start'],s['end']])[:24],origin='agent',profile=2,selection='available',
+            s.update(id=identity([index['source'],s['start'],s['end']])[:24],origin='agent',profile=2,score_scale=100,selection='available',
                      context_start=max(0,s['start']-2),context_end=min(index['duration'],s['end']+2))
             cursor=s['end']
         if abs(cursor-end)>0.001:raise ValueError('Incomplete semantic partition')

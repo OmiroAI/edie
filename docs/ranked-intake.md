@@ -33,15 +33,22 @@ Old whole-file role suggestions are not treated as intake decisions.
 
 ## Review interface
 
-Review mode walks the entire job library from lowest rank to highest, with filename as
+Review mode walks files without a confirmed human Keep/Exclude decision from lowest rank
+to highest, with filename as
 the deterministic tie-breaker. It clears list filters on entry and snapshots the order
 so new analysis cannot move the current file mid-review. **Save & next** persists the
 human choice, then advances. It continues through higher-ranked suggestions after the
 flagged files; users may leave mode at any time. Pending files remain visible as awaiting
-analysis. Re-entering mode rebuilds the order from current ranks.
+analysis. Re-entering mode rebuilds the remaining queue from persisted decisions and current ranks.
+Confirmed files stay accessible in the ordinary library, but never appear in Review mode.
+An explicit Unreviewed decision puts a file back into the queue.
 
 Cards show rank, availability and review status. The detail panel shows the threshold,
-automatic reasoning and editable override. Filters distinguish files needing judgement
+Edie’s suggestion and Your decision in separate sections. A Confirm Edie’s suggestion
+button persists a human decision against the exact classification revision and stores
+the confirmed suggestion snapshot. Choosing a different disposition overrides it; it
+does not replace or erase the agent suggestion. Automatic availability is not labelled
+as a human confirmation. Filters distinguish files needing judgement
 from those still being analysed; sorting includes Lowest rank first. Confident decisions
 do not require individual clicks. The shared library still requires explicit selection
 confirmation before story proposals, and scripts/exports retain their own approval gates.
@@ -62,3 +69,21 @@ Tests cover automatic keep, conservative uncertainty, pending evidence, exact du
 threshold configuration, idempotence and human authority. Chromium checks low-to-high
 review continuation and the in-player source control using synthetic footage. Production
 editorial judgement and finishing-app acceptance remain separate from these checks.
+
+## Explicit legacy score migration
+
+`edie.rescale.rescale(store, job)` is an operator-invoked migration, not a runtime
+heuristic. For authorised legacy profile-2 agent segments, scores 1–5 are multiplied
+by 20 for both intrinsic usefulness and story fit. Existing scores above 5, human-edited
+segments, boundaries, labels, selections and file Keep/Exclude decisions are preserved.
+Original values and `score_scale=100` are retained on the segment, and the segment
+revision/audit event is updated. Repeating the migration does not multiply scores again.
+File suggestion ranks are refreshed, while human decisions and their confirmation
+snapshots are unchanged. Duplicate priority remains zero. Future semantic prompts give
+explicit 0–100 anchors and mark the output scale. New records with that marker are never
+rescaled, even when their legitimate score is below 6.
+
+Migration tests verify ordering, idempotence and preserved exclusions. Browser tests
+confirm a low-ranked file, exit/re-enter, verify only the remaining file appears, confirm
+its suggestion and verify the completed queue does not reopen. Selection confirmation
+still uses exact decisions/segments, so changed score records require reconfirmation.
