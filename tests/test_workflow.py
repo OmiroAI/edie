@@ -80,6 +80,11 @@ class WorkflowTest(unittest.TestCase):
             reopened=Store(Path(d)/'state',config)
             self.assertEqual(Agent(reopened,Path(d),decider).run(job)['stage'],'review_script')
             self.assertEqual(decider.calls,2)
+            agent=Agent(reopened,Path(d),decider)
+            proposals=[dict(title='Option '+str(i),angle='Angle '+str(i),clips=[dict(source_id='source',segment_id='whole',**{'in':0,'out':2},purpose='hook')],missing_footage=[],review_notes=[]) for i in range(10)]
+            result=agent.tool(job,'propose_stories',{'proposals':proposals})
+            self.assertEqual(len(result['proposals']),10)
+            with self.assertRaisesRegex(ValueError,'two to ten'):agent.tool(job,'propose_stories',{'proposals':proposals+[proposals[0]]})
             reopened.db.close()
 
     def test_human_master_precedence_and_derivative_gate(self):

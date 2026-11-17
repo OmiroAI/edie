@@ -120,3 +120,19 @@ human edits. A diagnostic planning pass may populate the same validated cache wi
 publishing new segment records; subsequent leased execution validates and saves them.
 No paid fallback or automatic approval occurs. Unit checks cover the code allowlist
 and suppression of private exception text.
+
+### Story-planning context and proposal limits
+
+The agent snapshot remains capped at 190 KiB of canonical JSON, not 190k tokens and
+not the provider model's context window. It retains all scoped source discovery rows,
+with up to six ranked segment references per source. Segment discovery contains IDs,
+bounds, labels, selection and scores; title/reason excerpts are capped at 160/240
+characters. Full evidence remains intact and is available via `read_sources` before
+scripting. Private editorial context, brief and workflow gates are preserved. Older
+observations may be omitted with an explicit count. If required context still exceeds
+the cap, the agent fails with a specific planning-context message before any model call.
+
+`propose_stories` accepts 2–10 distinct source-linked proposals, validating all source
+ranges before saving them. Ten is a ceiling, not a quota; unsupported stories must not
+be invented. Each option remains subject to independent output creation and approval.
+Model selection is deployment configuration, not hardcoded in reusable Edie code.

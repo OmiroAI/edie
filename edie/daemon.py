@@ -32,7 +32,8 @@ def tick(root,config,media,socket,routes=None,sandbox_socket=None):
             except BlockingIOError:continue
             except Exception as error:
                 after=flow.get(job)
-                flow.update(job,after['version'],dict(requested_run=False,last_failure=type(error).__name__,stage='blocked'))
+                context_limit=str(error)=='Required context exceeds budget; operator reconciliation needed'
+                flow.update(job,after['version'],dict(requested_run=False,last_failure='planning_context_limit' if context_limit else type(error).__name__,stage='blocked',question='Story planning context exceeds the configured snapshot limit; compact source discovery summaries before resuming.' if context_limit else 'Agent planning stopped ('+type(error).__name__+'). Operator diagnosis is needed; media tasks may have completed normally.'))
     finally:store.db.close()
 
 

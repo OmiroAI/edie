@@ -27,7 +27,7 @@ INSTRUCTIONS='''You are Edie, a video-editor assistant. Make source-grounded edi
 Choose exactly one action each turn. Tools:
 read_sources: {"source_ids":[...]}, at most 8; returns complete indexed evidence.
 inspect_range: {"source_id":"...","start":0,"end":10,"fps":2} inspects up to 60 seconds at 1–4 fps (default 2), in bounded local frame batches with aligned transcript excerpts. Use 4 fps on short uncertain cut/action windows; timestamps remain inspection cues, not guaranteed word/frame alignment.
-propose_stories: {"proposals":[SCRIPT,SCRIPT,...]} supplies 2–3 distinct, fully source-linked story/script alternatives. When needs_story_options is true, use this tool after reading evidence; do not merely revive an old script. Each SCRIPT has the propose_script fields below.
+propose_stories: {"proposals":[SCRIPT,SCRIPT,...]} supplies 2–10 distinct, fully source-linked story/script alternatives. Offer only genuinely different supported stories; ten is a ceiling, not a target. When needs_story_options is true, use this tool after reading evidence; do not merely revive an old script. Each SCRIPT has the propose_script fields below.
 propose_script: {"title":"...","angle":"...","clips":[{"source_id":"...","segment_id":"...","in":0,"out":5,"purpose":"..."}],"missing_footage":[],"review_notes":[]}. When segments exist, every clip and overlay must reference its segment_id, with in/out inside that segment; use multiple clips for multiple beats. Keep context handles for inspection, not implicit inclusion. Choose complete utterances from timestamped transcripts; never cut off speech. Include dialogue and useful visible demonstrations. Keep duration within brief. Optionally add overlays:[{source_id,segment_id,in,out,at,purpose}] for B-roll picture over uninterrupted dialogue; at is timeline seconds, ranges cannot overlap. The script will wait for human approval.
 edit_timeline: {} builds the approved script. Optional overlays:[{source_id,segment_id,in,out,at,purpose}] may illustrate it with inspected B-roll while leaving approved dialogue/timing intact; or {"clips":[...]} after human feedback, retaining accepted human edits. Never modify accepted master without compatible layers.
 read_timeline: {} returns current timeline and cue IDs. refine_subtitles: {"language":"en","edits":[{"id":"cue-id","text":"corrected text","reason":"grammar correction"}]} creates a revision; preserve meaning/personality and flag uncertain names, never guess. New languages need every cue.
@@ -76,7 +76,8 @@ class Agent:
         from .segments import Segments
         for summary in summaries:
             parts=Segments(self.store).get(job,indexes[summary['source_id']]['source'])['items']
-            summary['segments']=sorted(parts,key=lambda s:-s.get('score',0))[:6]
+            summary['segments']=[{**{k:p[k] for k in ('id','start','end','labels','selection','score','story_fit') if k in p},'title':p['title'][:160],'reason':p['reason'][:240]} for p in sorted(parts,key=lambda s:-s.get('score',0))[:6]]
+            summary['evidence_note']='Compact discovery summary; use read_sources for full transcripts, visual evidence and all segment details before scripting.'
             summary['segment_count']=len(parts)
             from .classification import file_decision
             summary['file_decision']=file_decision(classifications.get(job,indexes[summary['source_id']]['source']))
@@ -125,7 +126,7 @@ class Agent:
         self.editorial_selection=True
         if name=='propose_stories':
             proposals=args['proposals']
-            if not isinstance(proposals,list) or not 2<=len(proposals)<=3:raise ValueError('Provide two or three story options')
+            if not isinstance(proposals,list) or not 2<=len(proposals)<=10:raise ValueError('Provide two to ten story options')
             if len({p['title'] for p in proposals})!=len(proposals) or len({p['angle'] for p in proposals})!=len(proposals):raise ValueError('Distinct story titles required')
             # Validate all source ranges before committing any proposal.
             for proposal in proposals:
@@ -323,7 +324,7 @@ class Agent:
                 if state['stage']!='finished':raise ValueError('Final approval and broker receipt required')
                 return state
             if action=='request_review' and state.get('needs_story_options'):
-                self.store.put('observation',dict(job=job,tool='request_review',status='failed',error='Provide two or three distinct source-linked story options with propose_stories before requesting script review.'))
+                self.store.put('observation',dict(job=job,tool='request_review',status='failed',error='Provide two to ten distinct source-linked story options with propose_stories before requesting script review.'))
                 continue
             if action!='invoke_tool':
                 return self.flow.update(job,state['version'],dict(stage=state['stage'] if action=='request_review' else action,question=decision['question']))

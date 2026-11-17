@@ -52,7 +52,7 @@ def summarize(state,rows,tasks,review):
     else:action=dict(tab='review',label='Review cut',detail='Watch the current export and give feedback.' if rendered else 'Your approved script is awaiting an edit.')
     if final:action=dict(tab='review',label='View approved output',detail='The approved delivery and its saved edit remain available.')
     if paused:action=dict(tab='activity',label='Review paused work',detail='Resume paused tasks in Activity or resume this workflow. Other tasks may still be running.')
-    if blocked:action=dict(tab='activity',label='Resolve blocked work',detail=str(state.get('question') or 'A task failed or was interrupted. Inspect Activity before retrying.'))
+    if blocked:action=dict(tab='activity',label='Resolve blocked work',detail=str(state.get('question') or ('A task failed or was interrupted. Inspect Activity before retrying.' if failures else 'Agent planning is blocked. Inspect workflow status before resuming.')))
     if state.get('control')=='cancelled':mode='cancelled';headline='Output cancelled'
     elif blocked:mode='attention';headline='Edie needs intervention'
     elif paused:mode='paused';headline='Some work is paused' if running else 'Work is paused'
