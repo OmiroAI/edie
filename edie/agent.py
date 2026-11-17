@@ -85,8 +85,14 @@ class Agent:
         observations=self.store.db.execute("SELECT body FROM records WHERE kind='observation' ORDER BY rowid DESC LIMIT 15").fetchall()
         selected=[json.loads(row[0]) for row in observations if json.loads(row[0]).get('job')==job]
         snapshot=dict(workflow=state,brief=self.store.get(job,'job')['brief'],context=self.store.job_context(job),sources=summaries,observations=list(reversed(selected)),omitted_observations=0)
-        while len(canonical(snapshot))>190*1024 and snapshot['observations']:
+        while len(canonical(snapshot))>190*1024 and len(snapshot['observations'])>1:
             snapshot['observations'].pop(0);snapshot['omitted_observations']+=1
+        if len(canonical(snapshot))>190*1024 and snapshot['observations']:
+            # Never silently discard the evidence just requested by the agent.
+            for summary in snapshot['sources']:
+                for field in ('segments','speech_excerpt','visual_excerpt','evidence_note'):summary.pop(field,None)
+            snapshot['discovery_compacted']=True
+            snapshot['discovery_note']='Source catalogue only to preserve latest tool evidence; use read_sources for detailed discovery.'
         if len(canonical(snapshot))>190*1024:raise ValueError('Required context exceeds budget; operator reconciliation needed')
         return snapshot
 

@@ -136,3 +136,10 @@ the cap, the agent fails with a specific planning-context message before any mod
 ranges before saving them. Ten is a ceiling, not a quota; unsupported stories must not
 be invented. Each option remains subject to independent output creation and approval.
 Model selection is deployment configuration, not hardcoded in reusable Edie code.
+
+When tool evidence makes the snapshot too large, older observations are removed first,
+but the latest observation is retained. The discovery list then falls back to source
+IDs, paths, durations, intake decisions and segment counts, with an explicit compaction
+notice. It never silently discards the source evidence the agent just requested. If
+even the minimal catalogue plus latest evidence exceeds the cap, planning stops with
+the context-limit diagnostic. A large-library regression includes a 140 KB tool result.
