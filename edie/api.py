@@ -63,7 +63,7 @@ def handler(root, token):
                 self.send_header('Content-Type', 'text/html; charset=utf-8')
                 self.send_header('Cache-Control', 'no-store')
                 self.send_header('X-Content-Type-Options', 'nosniff')
-                self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src blob:; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
                 self.send_header('Content-Length', str(len(page)))
                 self.end_headers(); self.wfile.write(page); return
             if not hmac.compare_digest(self.headers.get('Authorization', '').encode(), ('Bearer '+token).encode()):
@@ -94,6 +94,12 @@ def handler(root, token):
                         return self.respond(200, Catalogue(store).list())
                     if path == ['health']:
                         return self.respond(200, {'status': 'ok'})
+                    if len(path)==4 and path[0]=='tasks' and path[2]=='frame':
+                        from .editorial import preview_frame
+                        data=preview_frame(store,tasks.get(path[1]),float(path[3]))
+                        self.send_response(200);self.send_header('Content-Type','image/jpeg')
+                        self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
+                        self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data);return
                     if len(path) == 3 and path[0] == 'tasks' and path[2] == 'artifact':
                         task = tasks.get(path[1])
                         if task['state'] != 'completed' or not task['result'] or task['result'].get('kind') not in ('reference_preview','source_preview'):

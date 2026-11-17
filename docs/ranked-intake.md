@@ -99,3 +99,12 @@ automatically suggested, awaiting analysis and requiring-review counts; it never
 an automatic suggestion a human decision. The ordinary library supports optional
 confirmation/override of all scores. Historical task error results are shown as errors
 only while the task is failed/interrupted, not while a recovered attempt is running.
+
+### Segment edits preserve file intake
+
+Human range/label/selection edits freeze the existing completed file suggestion and
+source rank. Resetting a beat's score for re-review must not downgrade source availability
+or put the source back in file intake. Segment revisions still invalidate the exact
+story-selection confirmation. Source version/hash changes get a separate intake record;
+explicit human file overrides remain authoritative. Regression coverage trims a kept
+source so its segment scores reset to zero, then verifies the file decision is unchanged.

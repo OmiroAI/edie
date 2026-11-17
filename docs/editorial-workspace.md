@@ -98,3 +98,18 @@ Current state projection, independent story outputs, file properties and respons
 
 See [ranked automatic intake](ranked-intake.md) for the implemented decision policy,
 review threshold, low-to-high review mode and in-player source playback.
+
+### First-frame player previews
+
+Footage players load a first-frame still before playback; segment players show the
+frame at the segment start. Play remains an overlay and no audio/video autoplays.
+The authenticated `GET /tasks/{id}/frame/{seconds}` endpoint extracts one bounded
+JPEG (maximum 640px) from a completed review artifact. It validates finite in-range
+timestamps, confines paths to state, and uses a bounded FFmpeg process. It does not
+read original media or invoke inference. Pending review copies are prepared through
+the existing scoped proxy queue; the placeholder remains usable while they finish.
+
+The browser caches up to 64 still blobs, revokes object URLs after image loading, and
+ignores responses after navigation or playback starts. Bearer tokens stay in headers,
+never image URLs. CSP permits blob images. Tests cover authenticated frame retrieval,
+invalid timestamps, real JPEG output and visible source/segment posters in Chromium.

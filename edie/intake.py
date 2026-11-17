@@ -26,7 +26,13 @@ def reconcile(store, job):
         if old['override']:
             decisions[key] = old['override']
             continue
-        parts = segments.get(job, entry)['items']
+        segment_record=segments.get(job, entry)
+        previous=old.get('suggestion') or {}
+        # Human beat edits change story selection, not source availability/rank.
+        if segment_record['human'] and previous.get('intake_profile')==1 and previous.get('status')!='pending':
+            decisions[key]=previous
+            continue
+        parts = segment_record['items']
         ranked = [p for p in parts if p.get('profile')==2 and p.get('selection')!='rejected']
         score=max((p.get('score',0) for p in ranked),default=0)
         usable = [p for p in parts if p.get('profile') == 2 and

@@ -117,3 +117,20 @@ def main():
         if not worked:time.sleep(2)
 
 if __name__=='__main__':main()
+
+
+def preview_frame(store, task, seconds):
+    """Bounded still from an existing review artifact, never from a host path."""
+    import math
+    if task['state']!='completed' or not task.get('result') or task['result'].get('kind') not in ('source_preview','reference_preview'):
+        raise ValueError('Completed preview required')
+    if not math.isfinite(seconds) or seconds<0 or seconds>=task['result'].get('duration',0):
+        raise ValueError('Frame outside preview')
+    path=source(store.root,task['result']['path'])
+    try:
+        result=subprocess.run(['ffmpeg','-v','error','-nostdin','-threads','1','-ss',str(seconds),'-i',str(path),
+            '-frames:v','1','-vf','scale=640:640:force_original_aspect_ratio=decrease',
+            '-threads','1','-f','image2pipe','-c:v','mjpeg','-q:v','4','pipe:1'],capture_output=True,timeout=8,check=True)
+    except (subprocess.SubprocessError,OSError):raise ValueError('Preview frame unavailable') from None
+    if not result.stdout or len(result.stdout)>2*1024*1024:raise ValueError('Invalid preview frame')
+    return result.stdout

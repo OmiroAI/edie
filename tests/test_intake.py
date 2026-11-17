@@ -76,3 +76,18 @@ class IntakeTest(unittest.TestCase):
             self.assertEqual(saved['suggestion'],suggested)
             self.assertEqual(saved['override']['confirmed_suggestion'],suggested)
             store.db.close()
+
+    def test_human_range_edits_do_not_reopen_file_intake(self):
+        with tempfile.TemporaryDirectory() as d:
+            store,job,entries=test_classification.ClassificationTest().fixture(d)
+            index=indexes(store,job)['0'];index['coverage']={'profile':{'baseline_fps':1}}
+            (Path(d)/'index'/'0'/'index.json').write_text(json.dumps(index))
+            parts=propose(index)
+            for part in parts:part.update(profile=2,score=85,labels=['a_roll'])
+            segments=Segments(store);segments.save(job,index,parts,0,False)
+            reconcile(store,job);repo=Classifications(store);before=repo.get(job,entries[0])
+            segments.edit(job,index,dict(expected_revision=1,segment_id=parts[0]['id'],action='range',start=1,end=9))
+            self.assertTrue(all(p['score']==0 for p in segments.get(job,entries[0])['items']))
+            reconcile(store,job);after=repo.get(job,entries[0])
+            self.assertEqual(before,after);self.assertEqual(file_decision(after),'keep')
+            store.db.close()

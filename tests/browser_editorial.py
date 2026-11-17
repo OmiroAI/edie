@@ -40,6 +40,10 @@ with tempfile.TemporaryDirectory() as temp:
         page.goto(f'http://127.0.0.1:{server.server_address[1]}/dashboard');page.locator('#token').fill('synthetic-browser-token-'*3);page.get_by_role('button',name='Open workspace').click();page.get_by_role('heading',name='Source library').wait_for()
         assert page.locator('#jobs button').count()==2
         assert page.locator('.workflow-step').count()==5;assert 'Your review' in page.locator('#work-status').inner_text();assert '640 × 360' in page.locator('.file-properties').inner_text()
+        page.wait_for_function('() => document.querySelector(".player-poster")?.naturalWidth>0')
+        assert page.locator('video').count()==0
+        poster=page.locator('.player-poster').bounding_box();play=page.locator('#player .source-play').bounding_box()
+        assert abs((poster['x']+poster['width']/2)-(play['x']+play['width']/2))<2
         page.screenshot(path='/output/workspace-desktop.png',full_page=True)
         page.set_viewport_size({'width':1024,'height':900});page.screenshot(path='/output/workspace-tablet.png',full_page=True);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.set_viewport_size({'width':1512,'height':1100})
         assert page.locator('#player').get_by_role('button',name='Play source',exact=True).count()==1
@@ -65,6 +69,7 @@ with tempfile.TemporaryDirectory() as temp:
         assert 'keep' in page.locator('.agent-suggestion').inner_text()
         page.screenshot(path='/output/footage.png',full_page=True)
         page.get_by_role('button',name='Segments',exact=True).click();page.get_by_role('heading',name='Editorial segments').wait_for()
+        page.wait_for_function('() => document.querySelector(".player-poster")?.naturalWidth>0')
         page.get_by_role('button',name='Play segment',exact=True).click();page.locator('video').wait_for()
         page.get_by_role('button',name='Segment Blooper',exact=True).click();page.get_by_role('button',name='Segment selection selected',exact=True).click();page.get_by_label('Segment editorial note').fill('Use as supporting detail.');page.get_by_role('button',name='Save & next segment').click();page.get_by_role('heading',name='Short insert',exact=True).wait_for();page.locator('.source').filter(has_text='A complete thought').click();page.get_by_text('0:00–0:04 · Use as supporting detail.',exact=True).wait_for()
         page.get_by_text('Split or merge',exact=True).click();page.get_by_label('Segment boundary seconds').fill('2');page.get_by_role('button',name='Split here',exact=True).click();page.wait_for_function('() => document.querySelectorAll(".sources .source").length===3')

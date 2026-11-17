@@ -33,6 +33,12 @@ class EditorialTest(unittest.TestCase):
             self.assertEqual(footage(store,job)[0]['proxy_state'],'completed')
             token='fixture-token-'*4;server=HTTPServer(('127.0.0.1',0),handler(store.root,token));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
+                for seconds,auth,status in [('0',True,200),('0.5',True,200),('-1',True,400),('nan',True,400),('2',True,400),('0',False,401)]:
+                    conn=http.client.HTTPConnection(*server.server_address)
+                    conn.request('GET','/tasks/'+task['id']+'/frame/'+seconds,headers={'Authorization':'Bearer '+token} if auth else {})
+                    response=conn.getresponse();data=response.read();self.assertEqual(response.status,status)
+                    if status==200:self.assertEqual(response.getheader('Content-Type'),'image/jpeg');self.assertTrue(data.startswith(b'\xff\xd8'))
+                    conn.close()
                 url='/jobs/'+job+'/sources/allowed/disposition'
                 payload=dict(source_version='v1',source_sha256=entry['sha256'],expected_revision=0,disposition='keep',reason='Useful illustrative footage.')
                 for body,expected in [(payload,200),(payload,400),({**payload,'expected_revision':1,'source_version':'stale'},400),({**payload,'expected_revision':1,'disposition':'unreviewed'},200)]:
