@@ -41,7 +41,7 @@ def run_once(root, media, action="render", routes=None, classification_socket=No
                 raise ValueError('Invalid task payload')
             command = [sys.executable, '-m', 'edie.worker', '--state', str(store.root),
                        '--media', str(Path(media).resolve()), '--render', payload['revision'], '--attempt', attempt]
-        elif action in ('sync_index','sync_preview'):
+        elif action in ('sync_index','sync_preview','sync_waveform'):
             command=[sys.executable,'-m','edie.capture','--state',str(store.root),'--task',task['id']]
         elif action == 'review_proxy':
             store.get(task['job'], 'job')

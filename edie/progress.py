@@ -11,7 +11,7 @@ def tasks_for(store,job):
     result=[]
     for identifier, in store.db.execute('SELECT id FROM tasks WHERE job IN ('+','.join('?' for _ in ids)+') ORDER BY rowid DESC',ids).fetchall():
         task=repo.get(identifier)
-        if job!=root and task['job']!=job and task['payload']['action'] not in ('index','visual_index','segment_index','review_proxy','sync_index','sync_preview'):continue
+        if job!=root and task['job']!=job and task['payload']['action'] not in ('index','visual_index','segment_index','review_proxy','sync_index','sync_preview','sync_waveform'):continue
         result.append({**task,'shared':job!=root and task['job']==root,'output_name':children.get(task['job'])})
     return result
 

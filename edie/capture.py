@@ -72,7 +72,7 @@ class Capture:
         group=group_by_id({'groups':groups},body['group_id']);group['status']='rejected'
         return self.save(job,{**old,'groups':groups},body['expected_revision'],'human-reject-sync')
 
-    def confirm(self,job,body):
+    def confirm(self,job,body,actor="human-confirm-sync"):
         from .editorial import indexes
         values=indexes(self.store,job);old=self.get(job);groups=copy.deepcopy(old['groups'])
         group=group_by_id({'groups':groups},body['group_id'])
@@ -92,9 +92,36 @@ class Capture:
             anchor_duration=values[group['anchor_source_id']].get('duration')
             member_duration=values[key].get('duration')
             if anchor_duration is not None and member_duration is not None and min(anchor_duration,offsets[key]+member_duration)-max(0,offsets[key])<1:raise ValueError('Included cameras need at least one second of shared coverage')
+            if actor=='human-confirm-sync' and (m.get('alignment_review')!='automatic' or m.get('offset')!=offsets[key]):m['alignment_review']='human'
             m['offset']=offsets[key]
-        group.update(status='confirmed',primary_audio_source_id=audio,confirmed_at=time.time())
-        return self.save(job,{**old,'groups':groups},body['expected_revision'],'human-confirm-sync')
+        group.update(status='confirmed',primary_audio_source_id=audio,confirmed_at=time.time(),approval_origin='automatic' if actor=='automatic-audio-sync' else 'human')
+        return self.save(job,{**old,'groups':groups},body['expected_revision'],actor)
+
+
+    def accept_confident(self,job,body):
+        from .editorial import indexes
+        old=self.get(job)
+        if body['expected_revision']!=old['revision']:raise ValueError('Capture changed; refresh')
+        values=indexes(self.store,job);groups=copy.deepcopy(old['groups'])
+        group=group_by_id({'groups':groups},body['group_id'])
+        if group['status']!='proposed':return old
+        anchor=group['anchor_source_id'];anchor_duration=values[anchor].get('duration',0)
+        for m in group['members']:
+            if m['source_id']==anchor or not m.get('included',True):continue
+            entry=values.get(m['source_id'],{});matches=[v for v in m.get('matches',[]) if v.get('correlation',0)>=.65 and v.get('margin',0)>=.08]
+            offset=m.get('offset');duration=entry.get('duration',0)
+            valid=(m.get('confidence')=='strong_candidate' and finite(offset) and len(matches)>=2
+                and max(v['offset'] for v in matches)-min(v['offset'] for v in matches)<=.08
+                and all(abs(v['offset']-offset)<=.08 for v in matches)
+                and abs(m.get('drift_seconds') or 0)<=.08
+                and all(m.get(k)==entry.get('source',{}).get(k) for k in ('version','sha256'))
+                and min(anchor_duration,offset+duration)-max(0,offset)>=1)
+            m['alignment_review']='automatic' if valid else 'needs_review'
+        result=self.save(job,{**old,'groups':groups},old['revision'],'automatic-alignment-triage')
+        included=[m for m in group['members'] if m.get('included',True)]
+        if len(included)>=2 and all(m['source_id']==anchor or m.get('alignment_review')=='automatic' for m in included):
+            result=self.confirm(job,dict(expected_revision=result['revision'],group_id=group['id'],included=[m['source_id'] for m in included],offsets={m['source_id']:m['offset'] for m in included},primary_audio_source_id=group['primary_audio_source_id']),actor='automatic-audio-sync')
+        return result
 
 
 def proxy(store,job,entry):
@@ -109,11 +136,11 @@ def proxy(store,job,entry):
     return path,result
 
 
-def envelope(path):
+def envelope(path,minimum_seconds=10):
     import numpy as np
     raw=subprocess.run(['ffmpeg','-v','error','-nostdin','-i',str(path),'-vn','-ac','1','-ar','8000','-f','f32le','pipe:1'],capture_output=True,timeout=180,check=True).stdout
     samples=np.frombuffer(raw,dtype='<f4');samples=samples[:len(samples)//80*80]
-    if len(samples)<80000:raise ValueError('At least ten seconds of shared audio required')
+    if len(samples)<8000*minimum_seconds:raise ValueError('Insufficient audio for analysis')
     if not np.isfinite(samples).all():raise ValueError('Non-finite decoded audio')
     return np.log1p(np.sqrt(np.mean(samples.reshape(-1,80)**2,axis=1))*100)
 
@@ -162,6 +189,7 @@ def synchronize(store,task):
         except (ValueError,subprocess.SubprocessError):member.update(offset=None,confidence='uncertain',drift_seconds=None,matches=[],note='No usable shared audio; manual alignment required.')
     group['analysed_at']=time.time()
     result=repo.save(task['job'],{**config,'groups':groups},config['revision'],'local-audio-sync')
+    result=repo.accept_confident(task['job'],dict(expected_revision=result['revision'],group_id=group['id']))
     return dict(kind='sync_index',capture_revision=result['revision'],group_id=group['id'],matched=sum(m.get('offset') is not None for m in group['members'])-1)
 
 
@@ -187,17 +215,33 @@ def sync_preview(store,task):
     return dict(kind='sync_preview',path=str(target.relative_to(store.root)),sha256=digest(target),duration=length,group_id=group['id'],capture_revision=config['revision'],anchor_time=begin,member_time=begin-offset,offset=offset,audio='Anchor in left channel; other camera in right channel')
 
 
+def waveform(store,task):
+    """Bounded 20 Hz review envelope from a verified proxy; no model or upload."""
+    import numpy as np
+    from .editorial import indexes
+    entry=indexes(store,task['job'])[task['payload']['source_id']]['source']
+    if any(entry[k]!=task['payload'][k] for k in ('version','sha256')):raise ValueError('Waveform source changed')
+    from .core import probe
+    path,_=proxy(store,task['job'],entry)
+    if not any(s.get('codec_type')=='audio' for s in probe(path)['streams']):
+        return dict(kind='sync_waveform',source_id=entry['source_id'],step=.05,peaks=[],note='No audio track; align using picture.')
+    values=envelope(path,minimum_seconds=.1)
+    values=values[:len(values)//5*5].reshape(-1,5).max(axis=1)
+    maximum=float(values.max()) if len(values) else 0
+    return dict(kind='sync_waveform',source_id=entry['source_id'],step=.05,peaks=np.round(values/max(maximum,1e-9),3).tolist())
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--state',required=True);p.add_argument('--task');p.add_argument('--worker',action='store_true');a=p.parse_args()
     if a.task:
         from .tasks import Tasks
         s=Store(a.state);task=Tasks(s.db).get(a.task)
-        try:print(json.dumps(synchronize(s,task) if task['payload']['action']=='sync_index' else sync_preview(s,task)))
+        try:print(json.dumps({'sync_index':synchronize,'sync_preview':sync_preview,'sync_waveform':waveform}[task['payload']['action']](s,task)))
         finally:s.db.close()
         return
     from .worker import run_once
     while True:
-        worked=run_once(a.state,None,'sync_index') or run_once(a.state,None,'sync_preview')
+        worked=run_once(a.state,None,'sync_index') or run_once(a.state,None,'sync_preview') or run_once(a.state,None,'sync_waveform')
         if not worked:time.sleep(2)
 
 if __name__=='__main__':main()

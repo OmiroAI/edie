@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as temp:
         if title=='Unboxing a new perspective':
             from edie.capture import Capture
             Capture(store).save(job,dict(schema_version=1,mode='multicam',sources={'source-1':dict(camera_id='Presenter',role_hint='dialogue'),'source-2':dict(camera_id='Detail',role_hint='detail')},groups=[dict(id='synthetic-sync',name='Synthetic camera session',anchor_source_id='source-1',primary_audio_source_id='source-1',status='proposed',members=[{**entry,'camera_id':'Presenter','offset':0,'included':True},{**extra,'camera_id':'Detail','offset':0,'included':True,'confidence':'uncertain'}])]),0,'fixture')
-        flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy')
+        flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy');request_proxy(store,job,extra['source_id']);run_once(store.root,media,'review_proxy')
     server=Server(('127.0.0.1',0),handler(store.root,'synthetic-browser-token-'*3));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     with sync_playwright() as p:
         browser=p.chromium.launch(args=['--no-sandbox']);page=browser.new_page(viewport={'width':1512,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
@@ -45,6 +45,29 @@ with tempfile.TemporaryDirectory() as temp:
         assert page.locator('.capture-panel summary').first.inner_text().startswith('Cameras & sync')
         page.locator('.capture-panel > summary').click();assert page.get_by_role('button',name='Check sync preview',exact=True).count()==1
         assert page.get_by_label('Sync offset source-2').input_value()=='0'
+        # Waveform transport is fixture data here; real extraction is covered by FFmpeg unit tests.
+        page.route('**/capture/waveform',lambda route:route.fulfill(json=dict(id='wave-test',state='completed',result=dict(step=.05,peaks=[.2,.8,.4,.6]*20))))
+        page.get_by_role('button',name='Open alignment editor',exact=True).click()
+        page.wait_for_function("()=>document.querySelector('dialog .sync-readout').textContent.includes('Linked')")
+        assert page.locator('dialog video').count()==2
+        page.get_by_role('button',name='Earlier 0.1s',exact=True).click()
+        assert 'Offset 0.100s' in page.locator('.sync-readout').inner_text()
+        page.get_by_role('button',name='Find matching moments independently',exact=True).click()
+        page.evaluate("document.querySelectorAll('dialog video')[0].currentTime=.6;document.querySelectorAll('dialog video')[1].currentTime=.2")
+        page.wait_for_timeout(200)
+        page.get_by_role('button',name='Match these two frames',exact=True).click()
+        assert 'Offset 0.400s' in page.locator('.sync-readout').inner_text()
+        page.screenshot(path='/output/alignment-editor.png',full_page=True)
+        page.set_viewport_size({'width':390,'height':844})
+        assert page.locator('dialog').evaluate('(e)=>e.scrollWidth<=e.clientWidth')
+        page.set_viewport_size({'width':1512,'height':1100})
+        page.get_by_role('button',name='Use this alignment',exact=True).click()
+        assert page.get_by_label('Sync offset source-2').input_value()=='0.400'
+        page.get_by_role('button',name='Open alignment editor',exact=True).click()
+        page.wait_for_function("()=>document.querySelector('dialog .sync-readout').textContent.includes('Linked')")
+        page.get_by_role('button',name='Later 0.1s',exact=True).click()
+        page.get_by_role('button',name='Cancel changes',exact=True).click()
+        assert page.get_by_label('Sync offset source-2').input_value()=='0.400'
         page.locator('.capture-panel > summary').click()
         assert page.locator('.workflow-step').count()==5;assert 'Your review' in page.locator('#work-status').inner_text();assert '640 × 360' in page.locator('.file-properties').inner_text()
         page.wait_for_function('() => document.querySelector(".player-poster")?.naturalWidth>0')

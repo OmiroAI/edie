@@ -45,6 +45,26 @@ class CaptureTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'alignment changed'):resolve_overlay(agent,job,{**item,'sync_capture_revision':1},clips)
             self.assertFalse(Workflow(s).get(job)['approvals']);s.db.close()
 
+    def test_automatic_alignment_accepts_evidence_and_keeps_uncertain_for_review(self):
+        with tempfile.TemporaryDirectory() as d:
+            s=Store(d);job=s.job(dict(goal='Review',audience='Viewers',format='16:9',duration=20,language='en'));Workflow(s).start(job)
+            a=dict(source_id='a',version='1',sha256='a'*64,path='a.mp4');b=dict(source_id='b',version='1',sha256='b'*64,path='b.mp4')
+            indexes={'a':dict(source=a,duration=100),'b':dict(source=b,duration=20)}
+            repo=Capture(s);body=dict(mode='multicam',sources={},groups=[dict(id='g',status='proposed',anchor_source_id='a',primary_audio_source_id='b',members=[{**a,'offset':0,'included':True},{**b,'offset':10,'included':True,'confidence':'strong_candidate','matches':[]}])])
+            repo.save(job,body,0,'fixture')
+            with patch('edie.editorial.indexes',return_value=indexes):
+                result=repo.accept_confident(job,dict(expected_revision=1,group_id='g'))
+                self.assertEqual(result['groups'][0]['status'],'proposed')
+                self.assertEqual(result['groups'][0]['members'][1]['alignment_review'],'needs_review')
+                result['groups'][0]['members'][1]['matches']=[dict(offset=10,correlation=.9,margin=.2),dict(offset=10.01,correlation=.85,margin=.15)]
+                result=repo.save(job,result,result['revision'],'fixture')
+                result=repo.accept_confident(job,dict(expected_revision=result['revision'],group_id='g'))
+                self.assertEqual(result['groups'][0]['status'],'confirmed')
+                self.assertEqual(result['groups'][0]['approval_origin'],'automatic')
+                self.assertEqual(result['groups'][0]['members'][1]['alignment_review'],'automatic')
+                self.assertFalse(Workflow(s).get(job)['approvals'])
+            s.db.close()
+
     def test_picture_coverage_keeps_dialogue_audio_in_real_render(self):
         import subprocess
         from pathlib import Path
@@ -71,4 +91,13 @@ class CaptureTest(unittest.TestCase):
             with patch('edie.capture.proxy',side_effect=lambda store,j,entry:(media/(entry['source_id']+'.mp4'),{'duration':3})):
                 preview=sync_preview(s,dict(job=job,payload=dict(group_id='g',capture_revision=1,source_id='b')))
             self.assertTrue((s.root/preview['path']).is_file());self.assertEqual(preview['kind'],'sync_preview')
+            from edie.capture import waveform
+            entry=dict(source_id='a',version='1',sha256=digest(media/'a.mp4'))
+            with patch('edie.editorial.indexes',return_value={'a':dict(source=entry)}),patch('edie.capture.proxy',return_value=(media/'a.mp4',{'duration':3})):
+                wave=waveform(s,dict(job=job,payload=entry))
+                self.assertEqual(wave['step'],.05);self.assertLessEqual(len(wave['peaks']),61)
+                self.assertTrue(all(0<=v<=1 for v in wave['peaks']))
+                with self.assertRaisesRegex(ValueError,'source changed'):
+                    waveform(s,dict(job=job,payload={**entry,'version':'stale'}))
+
             s.db.close()

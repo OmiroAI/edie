@@ -2,7 +2,7 @@
 
 Status: implemented. Synthetic offset/drift checks, a real FFmpeg layered render,
 and browser review tests cover the core path. Real authorised footage has produced
-alignment candidates and sync previews. Human sync confirmation and an actual
+alignment candidates and sync previews. Uncertain-sync review and an actual
 finishing-application roundtrip remain acceptance gates.
 
 ## Editorial model
@@ -48,18 +48,23 @@ least ten seconds of usable audio. Constant offsets are supported; clock-drift
 retiming, timecode-based matching and arbitrary nested multicam timelines are not.
 Detected drift above 0.08 seconds blocks constant-offset confirmation.
 
-The worker creates proposals only. In Footage → Cameras & sync, the reviewer can
+The worker accepts strong, consistent, source-current matches automatically and marks
+uncertain matches for review. When every included member qualifies, it confirms the
+session with `approval_origin: automatic`, not a fabricated human approval. In
+Footage → Cameras & sync, the reviewer can
 inspect or adjust offsets, omit a member from the session, choose preferred audio,
-and explicitly confirm. Omitting a member here does not exclude its file or
-segments. Uncertain members need manual alignment or omission before confirmation.
+and explicitly confirm remaining uncertainty. Omitting a member here does not exclude its file or
+segments. Only uncertain members are expanded in the review queue. Automatically accepted
+matches remain accessible under “Inspect accepted matches and reference camera”.
+Uncertain members need manual alignment or omission before confirmation.
 A rejected session can be revised and confirmed. A confirmed session is immutable;
 reject it and propose a replacement to realign it.
 
-Check sync creates an eight-second (or shorter) side-by-side preview at the middle
+The optional Check sync button creates an eight-second (or shorter) side-by-side preview at the middle
 of shared coverage: anchor picture on the left, member on the right; anchor audio
 in the left channel, member audio in the right. Activity lists the completed
 previews. This sample is an aid, not proof of frame-accurate sync across a recording.
-Unconfirmed sessions in multicam mode block footage confirmation and story planning.
+Sessions with unresolved uncertain members block footage confirmation and story planning.
 
 ## Scripts, layers and rendering
 
@@ -101,6 +106,7 @@ Mutation bodies carry `expected_revision`; stale writes fail rather than overwri
 | POST `/jobs/ID/capture/preview` | `group_id`, member `source_id`, optional manual `offset`; returns durable task |
 | POST `/jobs/ID/capture/confirm` | `group_id`, `included` source IDs, `offsets` map for those IDs, `primary_audio_source_id` |
 | POST `/jobs/ID/capture/reject` | `group_id` |
+| POST `/jobs/ID/capture/accept-confident` | `group_id`, `expected_revision`; apply evidence-based triage to an existing proposal |
 | GET `/tasks/ID/artifact` | Completed sync preview, authenticated MP4 |
 | GET `/jobs/ID/workflow` | Existing workflow plus derived `layers` view |
 
@@ -124,3 +130,49 @@ that saved revision; retrying its old payload cannot silently overwrite it. Prev
 requests are keyed by their configuration and payload; failed previews can be
 explicitly recovered. Completed preview files are immutable and SHA-256-verified through
 task results. They use normal storage admission and deployment retention controls.
+
+## Visual alignment review
+
+Footage → Cameras & sync → **Open alignment editor** opens an in-place review
+workspace. Camera naming and new-session configuration are under Advanced setup.
+The editor has two original review-copy players, linked transport, a shared-range
+scrubber, and selectable reference/member/both audio. Both audio is useful for
+hearing doubled speech. It loads authenticated lightweight proxies into browser
+blob URLs; it does not send media to a model. Long proxies can take time to load.
+URLs are revoked and playback stopped when the dialog closes.
+
+The paired waveform lanes show a ten-second window centred on the reference
+playhead. Click either lane to seek. Waveforms are locally extracted normalized
+RMS envelopes (20 samples/second), not sample-accurate audio or loudness comparisons.
+Use Earlier/Later 0.1s or 0.01s to change the member picture while keeping the
+reference time fixed. For a missing/incorrect proposal, choose **Find matching
+moments independently**, seek each player's native controls to the same gesture
+or sound, then **Match these two frames**. This sets offset to reference time minus
+member time. Play together and inspect several points across the shared range.
+The browser periodically corrects playback drift; paused seeking and rendered
+sync-check previews are the more precise checks. Browser playback is not a
+frame-locked finishing-editor preview.
+
+**Use this alignment** copies the offset into the session draft. It does not
+approve the session. Cancel/Close discards changes made inside that dialog. After
+reviewing all included members, **Confirm reviewed synchronisation** persists the
+whole session with its revision/source checks. A page refresh discards unconfirmed
+session drafts. Confirmed sessions open read-only. No existing decisions are changed
+by opening, playing, adjusting or cancelling a pair.
+
+POST `/jobs/ID/capture/waveform` accepts `source_id` and returns a durable
+`sync_waveform` task, deduplicated by current source version/hash. The offline sync
+worker verifies the review copy and returns `kind`, `source_id`, `step` (0.05s)
+and `peaks` in its task result. At most two hours of source audio are accepted.
+A source without audio completes with an empty waveform and explanatory note;
+picture-based manual alignment remains available. Extraction failure is visible in
+Activity and uses normal explicit task recovery. This read-only derivative does
+not mutate capture revisions or require a capture approval. Dashboard polling
+waits while the editor is open so it cannot replace draft controls during review.
+
+Automatic triage uses the existing multi-window correlation/margin thresholds,
+requires offsets to agree within 80 ms, checks drift, source versions and overlap,
+and records its own actor in the capture audit. It never approves footage selection
+or scripts. Existing proposals can be migrated through `accept-confident` without
+re-indexing or changing the source offsets. Confident members are hidden from the
+required review list; uncertainty remains visible.

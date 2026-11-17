@@ -209,7 +209,14 @@ def handler(root, token):
                         if path[3]=='configure':return self.respond(200,repo.configure(job,body))
                         if path[3]=='discover':return self.respond(202,repo.discover(job,body))
                         if path[3]=='confirm':return self.respond(200,repo.confirm(job,body))
+                        if path[3]=='accept-confident':return self.respond(200,repo.accept_confident(job,body))
                         if path[3]=='reject':return self.respond(200,repo.reject(job,body))
+                        if path[3]=='waveform':
+                            from .editorial import indexes
+                            entry=indexes(store,job)[body['source_id']]['source']
+                            payload=dict(action='sync_waveform',source_id=entry['source_id'],version=entry['version'],sha256=entry['sha256'])
+                            task=tasks.submit(job,'sync-waveform:'+identity(payload),payload)
+                            return self.respond(202,tasks.get(task))
                         if path[3]=='preview':
                             config=repo.get(job)
                             if body['expected_revision']!=config['revision']:raise ValueError('Capture changed')
