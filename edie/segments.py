@@ -148,7 +148,7 @@ def generate(store,job,decider):
     return dict(kind='segment_index',profile=2,new_segments=count)
 
 
-def main():
+def _main():
     import argparse,time
     from .core import Store
     from .tasks import Tasks
@@ -168,5 +168,12 @@ def main():
         worked=run_once(a.state,a.media,'segment_index',classification_socket=a.socket)
         if a.once:return
         if not worked:time.sleep(2)
+
+def main():
+    try:_main()
+    except Exception as error:
+        from .failures import segment_failure
+        print(json.dumps({'error':segment_failure(error)}),flush=True)
+        raise SystemExit(1)
 
 if __name__=='__main__':main()

@@ -105,3 +105,18 @@ editorial quality acceptance remain outstanding.
 Activity reports durable queued tasks separately from requested agent work. A requested
 edit remains Queued until a worker is observed running; requesting work alone is not
 evidence of an active render. Root job counts include requests on its outputs.
+
+### Segmentation recovery diagnostics
+
+Segment workers report allowlisted failure codes for invalid/incomplete partitions,
+cuts inside speech, invalid schema, context limits, changed sources, subscription
+unavailability and timeouts. Unknown failures retain `segment_index_failed`. Only
+these codes pass from child stdout to task results; raw exception text, stderr,
+transcripts and provider responses are not exposed. Older generic failures cannot
+be diagnosed retrospectively from their stored code alone.
+
+Recovery reuses validated window caches and completed per-source segments, preserving
+human edits. A diagnostic planning pass may populate the same validated cache without
+publishing new segment records; subsequent leased execution validates and saves them.
+No paid fallback or automatic approval occurs. Unit checks cover the code allowlist
+and suppression of private exception text.

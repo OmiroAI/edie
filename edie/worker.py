@@ -68,7 +68,15 @@ def run_once(root, media, action="render", routes=None, classification_socket=No
                     break
                 time.sleep(0.5)
             if process.returncode:
-                tasks.stopped(task['id'], owner, 'failed', {'error': action+'_failed'})
+                code=action+'_failed'
+                if action=='segment_index':
+                    from .failures import SAFE_CODES
+                    output.seek(0)
+                    try:
+                        diagnostic=json.loads(output.read(4096))
+                        if isinstance(diagnostic,dict) and diagnostic.get('error') in SAFE_CODES:code=diagnostic['error']
+                    except (ValueError,TypeError):pass
+                tasks.stopped(task['id'], owner, 'failed', {'error': code})
                 return True
             output.seek(0)
             artifact = json.loads(output.read(1024*1024))
