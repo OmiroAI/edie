@@ -118,6 +118,10 @@ class Workflow:
                 if isinstance(timestamp,bool) or not isinstance(timestamp,(int,float)) or not math.isfinite(timestamp) or timestamp<0:raise ValueError('Invalid feedback timestamp')
                 current['feedback'].append(payload)
                 current['stage']='revising'
+            elif kind=='more_stories':
+                if current.get('revision') or self.store.get(job,'job').get('output_of'):raise ValueError('Request independent stories in the job library')
+                current.update(needs_story_options=True,script_changes_pending=True,requested_run=True,stage='reconciling',question=None)
+                current.setdefault('instructions',[]).append(dict(event_id=event_id,text='Propose additional distinct source-linked story options, up to ten. Preserve existing proposals and avoid repeating their angles. Use already inspected evidence; propose now when it supports distinct stories and only make targeted reads for missing details.',actor=actor))
             elif kind=='instruction':
                 if not isinstance(payload.get('text'),str) or not payload['text'].strip():raise ValueError('Instruction text required')
                 current.setdefault('instructions',[]).append({'event_id':event_id,'text':payload['text'],'actor':actor})
@@ -163,10 +167,10 @@ class Workflow:
                 for item in order[order.index(scope):]:current['approvals'].pop(item,None)
                 current['stage']='review_'+scope
             else:raise ValueError('Unknown human event')
-            if kind in ('feedback','recover','human_return','instruction','confirm_footage'):
+            if kind in ('feedback','recover','human_return','instruction','confirm_footage','more_stories'):
                 current['run_id']=uuid.uuid4().hex
                 current.pop('last_failure',None)
-            current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction','confirm_footage')
+            current['requested_run']=kind in ('approve','feedback','resume','recover','human_return','instruction','confirm_footage','more_stories')
             current.pop('job');current.pop('version')
             result={'id':event_id,'job':job,'version':expected+1,'kind':kind,'payload':payload,'received_at':time.time(),'actor':actor}
             self.db.execute('INSERT INTO events VALUES (?,?,?,?)',(event_id,job,key,json.dumps(result)))

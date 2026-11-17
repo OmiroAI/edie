@@ -143,3 +143,23 @@ IDs, paths, durations, intake decisions and segment counts, with an explicit com
 notice. It never silently discards the source evidence the agent just requested. If
 even the minimal catalogue plus latest evidence exceeds the cap, planning stops with
 the context-limit diagnostic. A large-library regression includes a 140 KB tool result.
+
+### Additional-story requests and live planning status
+
+The job-library Stories view has a Propose more stories button. It submits the
+`more_stories` workflow event with an empty payload, preserves existing proposals,
+sets `needs_story_options`/`script_changes_pending`, and requests the planner. Named
+outputs or jobs with an edit revision reject this library-level action. Ordinary
+text instructions can also ask for more stories; planner instructions explicitly
+route those requests to `propose_stories`, not just revision of the selected script.
+
+The snapshot includes existing story titles/angles to avoid repeats, a compact record
+of previously inspected source IDs and up to twelve short evidence notes from retained
+observations. Full tool results remain authoritative; memory notes are discovery aids.
+This prevents compaction from making each source batch appear uninspected again.
+
+Progress reads durable running invocation records as `counts.agent_running` and shows
+active planning separately from queued agent requests and media tasks. The Stories
+waiting view refreshes when its request finishes, provided playback, focused fields
+or unsaved sequence reordering would not be interrupted. Existing proposals and human
+approvals are not manufactured or discarded by this status refresh.

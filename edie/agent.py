@@ -27,15 +27,15 @@ INSTRUCTIONS='''You are Edie, a video-editor assistant. Make source-grounded edi
 Choose exactly one action each turn. Tools:
 read_sources: {"source_ids":[...]}, at most 8; returns complete indexed evidence.
 inspect_range: {"source_id":"...","start":0,"end":10,"fps":2} inspects up to 60 seconds at 1–4 fps (default 2), in bounded local frame batches with aligned transcript excerpts. Use 4 fps on short uncertain cut/action windows; timestamps remain inspection cues, not guaranteed word/frame alignment.
-propose_stories: {"proposals":[SCRIPT,SCRIPT,...]} supplies 2–10 distinct, fully source-linked story/script alternatives. Offer only genuinely different supported stories; ten is a ceiling, not a target. When needs_story_options is true, use this tool after reading evidence; do not merely revive an old script. Each SCRIPT has the propose_script fields below.
+propose_stories: {"proposals":[SCRIPT,SCRIPT,...]} supplies 2–10 distinct, fully source-linked story/script alternatives. Offer only genuinely different supported stories; ten is a ceiling, not a target. When the user asks for more/additional stories, use propose_stories rather than revising only the selected script. Preserve existing options and offer new angles. When needs_story_options is true, use this tool after reading evidence; do not merely revive an old script. Each SCRIPT has the propose_script fields below.
 propose_script: {"title":"...","angle":"...","clips":[{"source_id":"...","segment_id":"...","in":0,"out":5,"purpose":"..."}],"missing_footage":[],"review_notes":[]}. When segments exist, every clip and overlay must reference its segment_id, with in/out inside that segment; use multiple clips for multiple beats. Keep context handles for inspection, not implicit inclusion. Choose complete utterances from timestamped transcripts; never cut off speech. Include dialogue and useful visible demonstrations. Keep duration within brief. Optionally add overlays:[{source_id,segment_id,in,out,at,purpose}] for B-roll picture over uninterrupted dialogue; at is timeline seconds, ranges cannot overlap. The script will wait for human approval.
 edit_timeline: {} builds the approved script. Optional overlays:[{source_id,segment_id,in,out,at,purpose}] may illustrate it with inspected B-roll while leaving approved dialogue/timing intact; or {"clips":[...]} after human feedback, retaining accepted human edits. Never modify accepted master without compatible layers.
 read_timeline: {} returns current timeline and cue IDs. refine_subtitles: {"language":"en","edits":[{"id":"cue-id","text":"corrected text","reason":"grammar correction"}]} creates a revision; preserve meaning/personality and flag uncertain names, never guess. New languages need every cue.
 render_preview: {} queues current revision, then waits without model polling.
 evaluate_edit: {} checks actual render, audio/video and subtitle bounds.
 prepare_handoff: {} packages evaluated candidate for review; does not deliver or publish.
-request_review parks at exact current candidate. ask_human/blocked must explain what is missing. finish only after final human approval and broker receipt. No invented approvals. When script_changes_pending is true, reconcile the latest human instructions and supplied_script (if present) with source evidence and propose_script again; do not request approval of the previous script. If needs_story_options is true, propose_stories even when an older script exists. Otherwise, when a script already exists and needs review, request review. Approval gates are enforced in code.
-Use 3–12 purposeful clips for an initial concise review draft unless evidence warrants more. You can read sources over several turns. Do not exhaust the turn budget gathering irrelevant evidence. Return brief decision summaries, never hidden chain-of-thought.
+request_review parks at exact current candidate. ask_human/blocked must explain what is missing. finish only after final human approval and broker receipt. No invented approvals. When the user asks for additional stories, use propose_stories even if script_changes_pending is true. For ordinary script revision requests, when script_changes_pending is true, reconcile the latest human instructions and supplied_script (if present) with source evidence and propose_script again; do not request approval of the previous script. If needs_story_options is true, propose_stories even when an older script exists. Otherwise, when a script already exists and needs review, request review. Approval gates are enforced in code.
+Use evidence_sources_read and evidence_notes to remember earlier inspections. Do not reread overlapping full-source batches merely because old raw observations were compacted. Once several distinct angles have supporting evidence, propose them; do not inventory the entire library before offering stories. Use 3–12 purposeful clips for an initial concise review draft unless evidence warrants more. You can read sources over several turns. Do not exhaust the turn budget gathering irrelevant evidence. Return brief decision summaries, never hidden chain-of-thought.
 '''
 
 
@@ -69,7 +69,7 @@ class Agent:
 
     def snapshot(self,job):
         state=self.flow.get(job);indexes=self.indexes()
-        if state.get('needs_story_options') and not state.get('revision'):state={**state,'script':None,'script_proposals':[]}
+        if state.get('needs_story_options') and not state.get('revision'):state={**state,'existing_story_options':[{'title':p['title'],'angle':p['angle']} for p in state.get('script_proposals',[])],'script':None,'script_proposals':[]}
         summaries=[dict(source_id=k,path=v['source']['path'],duration=v['duration'],speech_excerpt=' '.join(s['text'] for s in v['transcript'])[:700],visual_excerpt=' '.join(s['observations'] for s in v['visual'])[:500],timing_issues=len(v.get('transcript_issues',[]))) for k,v in indexes.items()]
         from .classification import Classifications
         classifications=Classifications(self.store)
@@ -84,7 +84,17 @@ class Agent:
             # Full segment evidence is available through read_sources; file roles are legacy metadata.
         observations=self.store.db.execute("SELECT body FROM records WHERE kind='observation' ORDER BY rowid DESC LIMIT 15").fetchall()
         selected=[json.loads(row[0]) for row in observations if json.loads(row[0]).get('job')==job]
-        snapshot=dict(workflow=state,brief=self.store.get(job,'job')['brief'],context=self.store.job_context(job),sources=summaries,observations=list(reversed(selected)),omitted_observations=0)
+        evidence_notes={}
+        for observation in selected:
+            if observation.get('tool')!='read_sources' or observation.get('status')!='succeeded':continue
+            for evidence in observation.get('result',{}).get('sources',[]):
+                entry=evidence.get('source',{});key=entry.get('source_id')
+                if key in evidence_notes or key not in indexes:continue
+                if any(entry.get(k)!=indexes[key]['source'].get(k) for k in ('version','sha256')):continue
+                evidence_notes[key]=dict(source_id=key,
+                    segments=[{k:p[k] for k in ('id','start','end','title','selection') if k in p} for p in evidence.get('segments',[])[:2]],
+                    speech_excerpt=' '.join(c['text'] for c in evidence.get('transcript',[]))[:240])
+        snapshot=dict(workflow=state,brief=self.store.get(job,'job')['brief'],context=self.store.job_context(job),sources=summaries,observations=list(reversed(selected)),omitted_observations=0,evidence_sources_read=list(evidence_notes),evidence_notes=list(evidence_notes.values())[:12])
         while len(canonical(snapshot))>190*1024 and len(snapshot['observations'])>1:
             snapshot['observations'].pop(0);snapshot['omitted_observations']+=1
         if len(canonical(snapshot))>190*1024 and snapshot['observations']:
@@ -93,6 +103,8 @@ class Agent:
                 for field in ('segments','speech_excerpt','visual_excerpt','evidence_note'):summary.pop(field,None)
             snapshot['discovery_compacted']=True
             snapshot['discovery_note']='Source catalogue only to preserve latest tool evidence; use read_sources for detailed discovery.'
+        while len(canonical(snapshot))>190*1024 and snapshot['evidence_notes']:
+            snapshot['evidence_notes'].pop()
         if len(canonical(snapshot))>190*1024:raise ValueError('Required context exceeds budget; operator reconciliation needed')
         return snapshot
 

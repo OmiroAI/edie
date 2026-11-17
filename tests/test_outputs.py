@@ -89,3 +89,17 @@ class OutputTest(unittest.TestCase):
             self.assertTrue(all(t['state']=='completed' for t in results));self.assertNotEqual(results[0]['result']['path'],results[1]['result']['path'])
             self.assertNotEqual(flow.get(output_ids[0])['revision'],flow.get(output_ids[1])['revision']);self.assertIsNone(flow.get(job)['revision'])
             store.db.close()
+
+    def test_more_stories_and_active_planner_progress(self):
+        with tempfile.TemporaryDirectory() as d:
+            store,job,entry,index,one,two=self.fixture(d);flow=Workflow(store)
+            before=flow.get(job)
+            flow.event(job,'more',before['version'],'more_stories',{})
+            after=flow.get(job)
+            self.assertTrue(after['needs_story_options']);self.assertTrue(after['requested_run'])
+            self.assertEqual(before['script_proposals'],after['script_proposals'])
+            flow.reserve(job,'decision-test',{});flow.mark(job,'decision-test','running')
+            p=progress(store,job)
+            self.assertEqual(p['mode'],'working');self.assertEqual(p['steps'][2]['status'],'working')
+            self.assertEqual(p['counts']['agent_running'],1)
+            store.db.close()
