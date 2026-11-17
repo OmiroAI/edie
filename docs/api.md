@@ -57,3 +57,5 @@ rather than silently merging their contexts. Preserve the original state directo
 and use a fresh state directory for this development version. No automatic data
 migration or deletion occurs; a selective migration tool is still needed if those
 historical jobs must be resumed. Old media and output files remain untouched.
+
+See [multicam sessions and audio-led layers](multicam-and-layers.md) for camera alignment, review gates, API contracts and picture coverage.

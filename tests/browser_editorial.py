@@ -33,12 +33,19 @@ with tempfile.TemporaryDirectory() as temp:
         Classifications(store).save(job,extra,dict(disposition='keep',labels=[],reason='Available'),1,True)
         Segments(store).save(job,dict(source=extra,duration=1),[dict(id='extra-whole',start=0,end=1,title='Short insert',labels=['b_roll'],selection='available',score=30,reason='Illustration')],0,False)
         if title!='Unboxing a new perspective':Classifications(store).save(job,entry,dict(disposition='keep',labels=[],reason='Available'),1,True)
+        if title=='Unboxing a new perspective':
+            from edie.capture import Capture
+            Capture(store).save(job,dict(schema_version=1,mode='multicam',sources={'source-1':dict(camera_id='Presenter',role_hint='dialogue'),'source-2':dict(camera_id='Detail',role_hint='detail')},groups=[dict(id='synthetic-sync',name='Synthetic camera session',anchor_source_id='source-1',primary_audio_source_id='source-1',status='proposed',members=[{**entry,'camera_id':'Presenter','offset':0,'included':True},{**extra,'camera_id':'Detail','offset':0,'included':True,'confidence':'uncertain'}])]),0,'fixture')
         flow.update(job,0,dict(script=script,stage='review_script'));request_proxy(store,job,entry['source_id']);run_once(store.root,media,'review_proxy')
     server=Server(('127.0.0.1',0),handler(store.root,'synthetic-browser-token-'*3));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     with sync_playwright() as p:
         browser=p.chromium.launch(args=['--no-sandbox']);page=browser.new_page(viewport={'width':1512,'height':1100});errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
         page.goto(f'http://127.0.0.1:{server.server_address[1]}/dashboard');page.locator('#token').fill('synthetic-browser-token-'*3);page.get_by_role('button',name='Open workspace').click();page.get_by_role('heading',name='Source library').wait_for()
         assert page.locator('#jobs button').count()==2
+        assert page.locator('.capture-panel summary').first.inner_text().startswith('Cameras & sync')
+        page.locator('.capture-panel > summary').click();assert page.get_by_role('button',name='Check sync preview',exact=True).count()==1
+        assert page.get_by_label('Sync offset source-2').input_value()=='0'
+        page.locator('.capture-panel > summary').click()
         assert page.locator('.workflow-step').count()==5;assert 'Your review' in page.locator('#work-status').inner_text();assert '640 × 360' in page.locator('.file-properties').inner_text()
         page.wait_for_function('() => document.querySelector(".player-poster")?.naturalWidth>0')
         assert page.locator('video').count()==0
@@ -81,7 +88,7 @@ with tempfile.TemporaryDirectory() as temp:
         page.get_by_role('button',name='Save segment range',exact=True).click();page.wait_for_function('() => document.querySelectorAll(".sources .source").length===4')
         assert page.get_by_label('Segment start seconds').input_value()=='0.250'
         page.screenshot(path='/output/segments.png',full_page=True)
-        page.get_by_role('button',name='Story & script',exact=True).click();assert page.locator('.beat').count()==2
+        page.get_by_role('button',name='Story & script',exact=True).click();assert page.locator('.beat').count()==2;assert page.locator('.layer-row').count()==4;assert page.get_by_role('heading',name='Audio & picture plan',exact=True).count()==1
         page.get_by_title('Move later',exact=True).first.click();page.get_by_role('button',name='Save new story order',exact=True).click();page.wait_for_function('() => document.querySelector(".beat h3").textContent==="The practical takeaway"')
         page.wait_for_function('() => document.querySelector(".proposal-select").options.length===2')
         page.get_by_label('Script proposals').select_option(index=0);page.wait_for_function('() => document.querySelector(".beat h3").textContent==="An unexpected first impression"')

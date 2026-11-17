@@ -286,3 +286,5 @@ inspect authorised footage → propose grounded script → human approval → re
 mocks and editorial quality with real footage. Storage management and production
 hardening follow the same documented boundaries; neither is supplied merely by
 a working render queue.
+
+See [multicam sessions and audio-led layers](multicam-and-layers.md) for camera alignment, review gates, API contracts and picture coverage.

@@ -46,6 +46,8 @@ def create(store,job,body):
         options=[*state.get('script_proposals',[]),state.get('script')]
         script=next((p for p in options if p and identity(p)==body['script_candidate']),None)
         if script is None:raise ValueError('Unknown script candidate')
+        from .layers import validate_sync
+        validate_sync(store,root,script)
         for clip in script['clips']+script.get('overlays',[]):
             if clip['source_id'] in review['excluded'] or clip['source_id'] not in values:raise ValueError('Excluded source')
             index=values[clip['source_id']]

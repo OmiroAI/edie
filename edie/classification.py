@@ -60,7 +60,12 @@ def review_state(store,job,values=None,repo=None):
         from .segments import selection
         if parts and all(selection(p)=='rejected' for p in parts) and key not in excluded:excluded.append(key)
         rows.append(dict(source_id=key,version=entry['version'],sha256=entry['sha256'],classification=decision,segments=parts))
-    return dict(candidate=identity(rows),ready=bool(rows) and not missing,total=len(rows),unclassified=len(missing),excluded=excluded,included=len(rows)-len(excluded),segment_mode=segment_mode)
+    from .capture import Capture
+    capture=Capture(store).get(job)
+    pending=sum(g['status']=='proposed' for g in capture['groups']) if capture['mode']=='multicam' else 0
+    confirmed=[g for g in capture['groups'] if g['status']=='confirmed']
+    candidate=identity({'sources':rows,'sync_groups':confirmed}) if confirmed else identity(rows)
+    return dict(candidate=candidate,ready=bool(rows) and not missing and not pending,total=len(rows),unclassified=len(missing),excluded=excluded,included=len(rows)-len(excluded),segment_mode=segment_mode,sync_pending=pending)
 
 
 def file_decision(record):

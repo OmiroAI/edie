@@ -75,6 +75,9 @@ def handler(root, token):
                 if self.command == 'GET':
                     if path == ['workspaces']:
                         return self.respond(200,json.loads(os.getenv('EDIE_REVIEW_WORKSPACES','[{"label":"Edie","prefix":""}]')))
+                    if len(path)==3 and path[0]=='jobs' and path[2]=='capture':
+                        from .capture import Capture
+                        store.get(path[1],'job');return self.respond(200,Capture(store).get(path[1]))
                     if len(path)==3 and path[0]=='jobs' and path[2]=='outputs':
                         from .outputs import listing
                         return self.respond(200,listing(store,path[1]))
@@ -102,7 +105,7 @@ def handler(root, token):
                         self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data);return
                     if len(path) == 3 and path[0] == 'tasks' and path[2] == 'artifact':
                         task = tasks.get(path[1])
-                        if task['state'] != 'completed' or not task['result'] or task['result'].get('kind') not in ('reference_preview','source_preview'):
+                        if task['state'] != 'completed' or not task['result'] or task['result'].get('kind') not in ('reference_preview','source_preview','sync_preview'):
                             raise ValueError('No completed artifact')
                         return self.media(source(store.root, task['result']['path']))
                     if len(path) == 2 and path[0] == 'tasks':
@@ -143,6 +146,8 @@ def handler(root, token):
                         state['usage_summary'] = summary(state['usage'])
                         from .progress import progress
                         state['progress']=progress(store,path[1],state)
+                        from .layers import script_layers
+                        state['layers']=script_layers(state.get('script'))
                         from .classification import review_state
                         state['footage_review']=review_state(store,path[1])
                         state['footage_review']['confirmed']=state.get('footage_confirmation')==state['footage_review']['candidate']
@@ -197,6 +202,25 @@ def handler(root, token):
                         decision=body['disposition']
                         if decision not in ('keep','exclude','unreviewed'):raise ValueError('Unknown file decision')
                         return self.respond(200,Classifications(store).save(path[1],entry,dict(disposition=decision,labels=['throw_away'] if decision=='exclude' else [],reason=body['reason'],origin='human'),body['expected_revision'],True,'dashboard-operator'))
+                    if len(path)==4 and path[0]=='jobs' and path[2]=='capture':
+                        from .capture import Capture
+                        from .scope import library_job
+                        repo=Capture(store);job=library_job(store,path[1]);store.get(job,'job')
+                        if path[3]=='configure':return self.respond(200,repo.configure(job,body))
+                        if path[3]=='discover':return self.respond(202,repo.discover(job,body))
+                        if path[3]=='confirm':return self.respond(200,repo.confirm(job,body))
+                        if path[3]=='reject':return self.respond(200,repo.reject(job,body))
+                        if path[3]=='preview':
+                            config=repo.get(job)
+                            if body['expected_revision']!=config['revision']:raise ValueError('Capture changed')
+                            from .capture import group_by_id
+                            group=group_by_id(config,body['group_id'])
+                            if body['source_id']==group['anchor_source_id'] or not any(m['source_id']==body['source_id'] for m in group['members']):raise ValueError('Choose another camera')
+                            payload=dict(action='sync_preview',group_id=group['id'],capture_revision=config['revision'],source_id=body['source_id'])
+                            if 'offset' in body:payload['offset']=body['offset']
+                            task=tasks.submit(job,'sync-preview:'+identity(payload),payload)
+                            return self.respond(202,tasks.get(task))
+                        raise ValueError('Unknown capture action')
                     if len(path)==5 and path[0]=='jobs' and path[2]=='sources' and path[4]=='proxy':
                         from .editorial import request_proxy
                         from urllib.parse import unquote

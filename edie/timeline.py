@@ -23,7 +23,7 @@ def frames(seconds):
 
 def build(clips, media, title='Draft', overlays=(),store=None):
     timeline=otio.schema.Timeline(name=title)
-    video=otio.schema.Track(name='Video',kind=otio.schema.TrackKind.Video)
+    video=otio.schema.Track(name='Primary picture',kind=otio.schema.TrackKind.Video)
     audio=otio.schema.Track(name='Dialogue',kind=otio.schema.TrackKind.Audio)
     for item in clips:
         path=media_source(store,media,item)
@@ -43,7 +43,7 @@ def build(clips, media, title='Draft', overlays=(),store=None):
         else:audio.append(otio.schema.Gap(duration=otio.opentime.RationalTime(end-start,RATE)))
     timeline.tracks.extend([video,audio])
     if overlays:
-        track=otio.schema.Track(name='B-roll',kind=otio.schema.TrackKind.Video)
+        track=otio.schema.Track(name='Picture coverage (muted)',kind=otio.schema.TrackKind.Video)
         cursor=0
         for item in sorted(overlays,key=lambda x:x['at']):
             at=frames(item['at']);start=frames(item['in']);end=frames(item['out'])

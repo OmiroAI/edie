@@ -99,3 +99,5 @@ system documents for recovery limits and remaining production gaps.
 See [editorial segments](docs/editorial-segments.md) for source-linked segment classification and review.
 
 See [editorial progress and independent outputs](docs/editorial-progress-and-outputs.md) for dashboard states, shared job libraries, output isolation and file properties.
+
+See [multicam sessions and audio-led layers](docs/multicam-and-layers.md) for camera alignment, review gates, API contracts and picture coverage.

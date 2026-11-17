@@ -112,3 +112,5 @@ accepted master remains authoritative when no editable timeline is supplied.
 
 The initial library tests can run without Premiere. They do not establish finishing-
 application compatibility; that acceptance step remains outstanding.
+
+See [multicam sessions and audio-led layers](multicam-and-layers.md) for camera alignment, review gates, API contracts and picture coverage.

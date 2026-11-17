@@ -74,6 +74,9 @@ class Workflow:
                     if not review['ready'] or current.get('footage_confirmation')!=review['candidate']:raise ValueError('Confirm footage selection first')
                 if current.get('script_changes_pending'):raise ValueError('Review the reconciled script before approving')
                 scope=payload['scope'];candidate=payload['candidate']
+                if scope=='script':
+                    from .layers import validate_sync
+                    validate_sync(self.store,job,current.get('script') or {})
                 if scope=='script' and current.get('needs_story_options'):raise ValueError('Story options are not ready')
                 if scope=='script' and current.get('footage_review_required',True):
                     if any(c.get('source_id') in review['excluded'] or c.get('source_id') not in review_values for c in (current.get('script') or {}).get('clips',[])+(current.get('script') or {}).get('overlays',[])):raise ValueError('Script contains rejected or out-of-scope footage')
